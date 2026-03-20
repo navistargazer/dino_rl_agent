@@ -60,6 +60,12 @@ def train_dino_agent():
             # 3. 환경과 상호작용 (키보드 누르고, 스킵 대기하고, 결과 받기)
             # 앞서 말씀드린 time.sleep(0.06) 같은 타이밍 조절이 이 안에서 일어납니다.
             next_state, reward, done = env.step(action)
+            
+            interval = time.time() - start
+            print(interval)
+            if interval < 0.066:
+                time.sleep(0.066 - interval)
+
             # if len(memory) > BATCH_SIZE:
             # # 4. 경험 저장 (방금 겪은 일을 메모리에 기록)
             # memory.push(state, action, reward, next_state, done)
@@ -70,10 +76,6 @@ def train_dino_agent():
             # 6. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             total_reward += reward
-            interval = time.time() - start
-            print(interval)
-            if interval < 0.066:
-                time.sleep(0.066 - interval)
         # ----------------------------------------------------
         # [게임 한 판 종료]
         # ----------------------------------------------------

@@ -29,5 +29,5 @@ class Vision:
         else:
             # 다음 스테이트 용으로 프레임 추가
             self.frames_stacked.append(frame)
-        state = torch.from_numpy(np.stack(self.frames_stacked)).unsqueeze(0)
+        state = torch.from_numpy(np.stack(self.frames_stacked, axis=0)).unsqueeze(0)
         return state
