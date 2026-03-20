@@ -18,10 +18,10 @@ class DQN_CNN(nn.Module):
     def forward(self, state):
         # 합성곱-활성화 3번
         state = F.relu(self.conv1(state))       # (1, 32, 20, 20)
-        statex = F.relu(self.conv2(state))       # (1, 64, 9, 9)
+        state = F.relu(self.conv2(state))       # (1, 64, 9, 9)
         state = F.relu(self.conv3(state))       # (1, 64, 7, 7)
         # 데이터를 1차원으로 flatten
-        state = statex.view(state.size(0), -1)       # (1, 3136)
+        state = state.view(state.size(0), -1)       # (1, 3136)
         # FC 층
         state = F.relu(self.fc1(state))         # (512)
         # Q-Value 계산(행동별 점수)

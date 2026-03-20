@@ -10,8 +10,6 @@ class DinoEnvironment:
         self.done = False
 
     def restart_game(self):
-        pyautogui.hotkey('alt', 'tab')
-        time.sleep(1)
         pyautogui.press('space')
         self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
@@ -31,7 +29,7 @@ class DinoEnvironment:
         # 행동 이후 상태
         self.state = self.vision.get_next_state()
         # 사망 판정
-        self.done = self._is_game_over()
+        self.done = self.vision.isgameover
         # 보상 설정
         if self.done:
             self.reward = -10
@@ -40,26 +38,15 @@ class DinoEnvironment:
 
         return self.state, self.reward, self.done
 
-    def _is_game_over(self):
-        # GAMEOVER 특정 픽셀 값을 받아와서 검게 변했으면 사망 판정
-        '''=== 클릭한 픽셀 정보 ====
-Matplotlib 좌표 (x, y): (47.86, 2.55)
-넘파이 배열 인덱스 [y, x]: [2, 47]
-픽셀 값 (0~1 정규화): 0.3255
-👉 수정할 코드: state[3, 2, 47]'''
-        dead_pixel = self.state
-
     def wait(self):
-        print('wait')
+        pass
     
     def jump(self):
         pyautogui.keyDown('up')
         time.sleep(0.4)
         pyautogui.keyUp('up')
-        print('jump')
 
     def down(self):
         pyautogui.keyDown('down')
         pyautogui.keyUp('down')
-        print('down')
     

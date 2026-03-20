@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # --- 사용자의 monitor 설정과 동일하게 맞추세요 ---
 # dql_vision.py에 설정된 monitor 값을 그대로 가져옵니다.
-monitor = {'top': 170, 'left': 180, 'width': 600, 'height': 100}
+monitor = {'top': 170, 'left': 140, 'width': 300, 'height': 80}
 sct = mss.mss()
 
 def capture_and_preprocess():
@@ -20,12 +20,8 @@ def capture_and_preprocess():
     # 화면 캡처 및 전처리 (우리의 비전 모듈과 동일 로직)
     screen = np.array(sct.grab(monitor))
     gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
-    resized = cv2.resize(gray, (84, 84))
-    
-    # 정규화 (0~1) - 실제 에이전트가 보는 값과 똑같이 만듭니다.
-    normalized = (resized / 255.0).astype(np.float32)
-    
-    return normalized
+        
+    return gray
 
 def onclick(event):
     """Matplotlib 차트 위를 클릭했을 때 호출되는 콜백 함수"""
@@ -56,6 +52,7 @@ def onclick(event):
 if __name__ == "__main__":
     # 1. 죽어있는 화면 캡처
     image = capture_and_preprocess()
+    # print(image[5, 205])
 
     # 2. Matplotlib으로 이미지 띄우기
     fig, ax = plt.subplots()
