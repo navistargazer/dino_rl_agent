@@ -11,11 +11,9 @@ from dqn_cnn import DQN_CNN
 from dino_env import DinoEnvironment
 from replay_buffer import ReplayBuffer
 from train_buffer import train_buffer
-import open_game_window as gw
 import os
 
 
-MONITOR = {'top': 170, 'left': 140, 'width': 300, 'height': 80}
 NUM_EPISODES = 10000 # 총 플레이할 게임 판 수
 BATCH_SIZE = 32     # 한 번 학습할 때 꺼내볼 과거 경험의 개수
 
@@ -44,7 +42,7 @@ def update_epsilon(epsilon):
 
 def train_dino_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
-    env = DinoEnvironment(MONITOR)         # 키보드 제어, 보상 판단을 통제할 객체
+    env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
     replaybuffer  = ReplayBuffer(capacity=10000)         # 경험을 저장할 커다란 메모리 공간
     best_score = 0
     epsilon = 1.0
@@ -123,6 +121,4 @@ def train_dino_agent():
         time.sleep(1)
 
 if __name__ == "__main__":
-    gw.setup_game_window()
-    time.sleep(1)
     train_dino_agent()

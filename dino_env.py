@@ -3,11 +3,12 @@ import time
 from dqn_vision import Vision
 
 class DinoEnvironment:
-    def __init__(self, monitor):
-        self.vision = Vision(monitor)
+    def __init__(self):
+        self.vision = Vision()
         self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
+        pyautogui.click(self.vision.monitor['left'], self.vision.monitor['top'])
 
     def restart_game(self):
         pyautogui.press('space')
