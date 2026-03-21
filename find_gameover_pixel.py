@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # --- 사용자의 monitor 설정과 동일하게 맞추세요 ---
 # dql_vision.py에 설정된 monitor 값을 그대로 가져옵니다.
-monitor = {'top': 170, 'left': 140, 'width': 300, 'height': 80}
+monitor = {'top': 160, 'left': 120, 'width': 600, 'height': 100}
 sct = mss.mss()
 
 def capture_and_preprocess():

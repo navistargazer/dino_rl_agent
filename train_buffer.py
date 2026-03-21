@@ -45,8 +45,7 @@ def train_buffer(model, optimizer, batch, device):
     # 역전파
     loss.backward()
     # 가중치 업데이트
-    optimizer.step()
-    
+    optimizer.step()    
 
 
 

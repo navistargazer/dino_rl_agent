@@ -14,22 +14,12 @@ from train_buffer import train_buffer
 import open_game_window as gw
 
 
-
-
-
-
-# 4. 동작의 결과에 따른 보상(reward) 부여(사망/생존) - 역전파로 가중치 수정
-
-# 5. 캐릭터가 사망하면 학습 루프 1회 종료
-
-# 6. 누적 보상의 합을 최대화하는 정책(policy)
-
-MONITOR = {'top': 170, 'left': 140, 'width': 300, 'height': 80}
-NUM_EPISODES = 1000 # 총 플레이할 게임 판 수
+MONITOR = {'top': 160, 'left': 120, 'width': 600, 'height': 100}
+NUM_EPISODES = 10000 # 총 플레이할 게임 판 수
 BATCH_SIZE = 32     # 한 번 학습할 때 꺼내볼 과거 경험의 개수
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = DQN_CNN().to(device)           # 아까 만든 뇌 (PyTorch 신경망 모델)
+model = DQN_CNN().to(device)        # 학습자의 두뇌
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
 # 2. 현재 상태에 맞는 동작(action) 실행 - 동작:3(0-아무것도 안함, 1-점프, 2-숙이기)
@@ -58,21 +48,13 @@ def train_dino_agent():
     best_score = 0
 
     for episode in range(NUM_EPISODES):
-        # ----------------------------------------------------
-        # [게임 한 판(Episode) 시작]
-        # ----------------------------------------------------
         state, total_reward, done = env.restart_game()                  # 브라우저 초기화 및 게임 시작
         frame_count = 0
         while not done: 
-            # ----------------------------------------------------
-            # [1 Step 진행 (매 프레임마다 일어나는 일)]
-            # ----------------------------------------------------
             start = time.time()
             # 2. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
             action = select_action(state, model, epsilon) 
             
-            # 3. 환경과 상호작용 (키보드 누르고, 스킵 대기하고, 결과 받기)
-            # 앞서 말씀드린 time.sleep(0.06) 같은 타이밍 조절이 이 안에서 일어납니다.
             next_state, reward, done = env.step(action)
             
             interval = time.time() - start
@@ -99,9 +81,7 @@ def train_dino_agent():
             # 6. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             total_reward += reward
-        # ----------------------------------------------------
-        # [게임 한 판 종료]
-        # ----------------------------------------------------
+            
         print(f"Episode: {episode} | Score: {frame_count} | Total Reward: {total_reward} | Epsilon: {epsilon:.2f}")
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)

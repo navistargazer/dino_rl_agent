@@ -16,7 +16,7 @@ class Vision:
         # 수정 1: BGRA -> GRAY로 정확히 변환
         gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY) 
         # gameover 픽셀로 판단
-        self.isgameover = gray[0, 173] < 125.0
+        self.isgameover = gray[6, 234] < 125.0
         resized = cv2.resize(gray, (84, 84))
         normalized = (resized / 255.0).astype(np.float32)
         return normalized
