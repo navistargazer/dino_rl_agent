@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def train_buffer(model, optimizer, batch, device):
+def train_buffer(model, target_model, optimizer, batch, device):
     # 1. 데이터 전처리 파트
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)
@@ -30,10 +30,16 @@ def train_buffer(model, optimizer, batch, device):
 
     # 미래에 획득할 가치(수치확인만이 목적이므로 가중치 수정이 안되도록 기울기 추적을 끊는다)
     with torch.no_grad():
-        # 미래 가치들 확인
-        next_q_values = model(next_states_tensor)           # (32, 2)
-        # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
-        max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
+        # target dqn - target이 행동을 고르고 평가도 함
+        # # 미래 가치들 확인
+        # next_q_values = target_model(next_states_tensor)           # (32, 2)
+        # # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
+        # max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
+        # double dqn - model이 최선행동을 고르고, target이 평가
+        online_next_q = model(next_states_tensor)
+        best_actions = online_next_q.argmax(dim=1, keepdim=True)
+        target_next_q = target_model(next_states_tensor)
+        max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
         # 벨만방정식의 정답지 공식(사망시 미래가치는 증발하는 것을 (1-dones)로 구현)
         target_q = rewards_tensor + 0.99 * max_next_q_values * (1 - dones_tensor)
     
