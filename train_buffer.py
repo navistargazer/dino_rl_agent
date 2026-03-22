@@ -30,7 +30,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
 
     # 미래에 획득할 가치(수치확인만이 목적이므로 가중치 수정이 안되도록 기울기 추적을 끊는다)
     with torch.no_grad():
-        # target dqn - target이 행동을 고르고 평가도 함
+        # # target dqn - target이 행동을 고르고 평가도 함
         # # 미래 가치들 확인
         # next_q_values = target_model(next_states_tensor)           # (32, 2)
         # # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
@@ -45,7 +45,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
     
     # 3. 역전파
     # 손실함수
-    loss = F.mse_loss(acted_q, target_q)
+    loss = F.smooth_l1_loss(acted_q, target_q)
     # 기울기 찌꺼기 제거
     optimizer.zero_grad()
     # 역전파

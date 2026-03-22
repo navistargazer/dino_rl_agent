@@ -33,13 +33,6 @@ def select_action(state, model, epsilon):
             q_values = model.forward(state) # 현재 상태의 q값
             return torch.argmax(q_values).item()    # 가장 큰 값의 인덱스에 있는 숫자(int)를 반환 -> q값이 [0.1, 0.8]인 경우 1번 인덱스의 item인 1을 반환
 
-def update_epsilon(epsilon):
-    if (epsilon > 0.05):
-        epsilon *= 0.995
-    return epsilon
-
-
-
 def train_dino_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
     env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
@@ -47,7 +40,7 @@ def train_dino_agent():
     best_score = 0
     epsilon = 1.0
     total_steps = 0
-    TARGET_UPDATE_FREQ = 1000
+    update_freq = 1000
     
     # 학습 이어하기(모델 저장 파일 로드)
     model_path = 'best_model.pth'
@@ -56,7 +49,8 @@ def train_dino_agent():
         model.load_state_dict(checkpoint['model_state_dict'])
         best_score = checkpoint['best_score']
         epsilon = checkpoint['epsilon']
-        print(f'이어서 학습 시작 (기존 최고 생존: {best_score} / Epsilon: {epsilon:.3f})")')
+        update_freq = checkpoint['update_freq']
+        print(f'이어서 학습 시작 (기존 최고 생존: {best_score} / Epsilon: {epsilon:.3f})')
     else:
         best_score = 0
         epsilon = 1.0
@@ -74,42 +68,46 @@ def train_dino_agent():
         epi_start_time = time.time()
         while not done: 
             start = time.time()
-            # 2. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
+            # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
             action = select_action(state, model, epsilon) 
-            
+                        
+            # 2. 1스텝 진행(다음 상태 확인)
+            frame_count += 1
             next_state, reward, done = env.step(action)
             
+            # 3. 경험 저장 (방금 겪은 일을 메모리에 기록)
+            replaybuffer.push(state, action, reward, next_state, done)
+            
+            # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
+            if len(replaybuffer) > BATCH_SIZE:
+                batch = replaybuffer.sample(BATCH_SIZE)
+                train_buffer(model, target_model, optimizer, batch, device)
+            
+            # 5. 1000 프레임마다 타겟모델 업데이트
+            total_steps += 1
+            if (total_steps % update_freq) == 0:
+                target_model.load_state_dict(model.state_dict())
+                print('타겟 모델 업데이트')
+            
+            # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = time.time() - start
             if interval < 0.066:
                 time.sleep(0.066 - interval)
-            frame_count += 1
-
-            # # 4. 경험 저장 (방금 겪은 일을 메모리에 기록)
-            replaybuffer.push(state, action, reward, next_state, done)
-            
-            # 6. 상태 업데이트 (다음 스텝을 위해)
+            # 7. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             total_reward += reward
 
         # 생존 시간 계산
         survival_time = time.time() - epi_start_time
 
-        # # 5. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-        if len(replaybuffer) > BATCH_SIZE:
-            training_iteration = min(frame_count, 500)  # 훈련 상한 설정
-            for _ in range(training_iteration):
-                batch = replaybuffer.sample(BATCH_SIZE)
-                train_buffer(model, target_model, optimizer, batch, device)
-        if total_steps % TARGET_UPDATE_FREQ == 0:
-            target_model.load_state_dict(model.state_dict())
-        
-        # 6. 베스트 모델 저장
+        # 베스트 모델 저장
         if survival_time > best_score:
             best_score = survival_time
             checkpoint = {
                 'model_state_dict': model.state_dict(),
                 'best_score': best_score,
                 'epsilon': epsilon,
+                'update_freq': update_freq,
             }
             torch.save(checkpoint, 'best_model.pth')
             print('Best model saved!')
@@ -117,7 +115,7 @@ def train_dino_agent():
         print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {total_reward:.2f} | Epsilon: {epsilon:.2f}")
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
-        epsilon = update_epsilon(epsilon) 
+        epsilon = max(0.05, epsilon * 0.995)
         time.sleep(1)
 
 if __name__ == "__main__":

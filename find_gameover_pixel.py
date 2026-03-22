@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # --- 사용자의 monitor 설정과 동일하게 맞추세요 ---
 # dql_vision.py에 설정된 monitor 값을 그대로 가져옵니다.
-monitor = {'top': 222, 'left': 373, 'width': 350, 'height': 82}
+monitor = {'top': 224, 'left': 238, 'width': 350, 'height': 82}
 sct = mss.mss()
 
 def capture_and_preprocess():
@@ -19,9 +19,15 @@ def capture_and_preprocess():
 
     # 화면 캡처 및 전처리 (우리의 비전 모듈과 동일 로직)
     screen = np.array(sct.grab(monitor))
-    gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
+    # 수정 1: BGRA -> GRAY로 정확히 변환
+    gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY) 
+    # 밤/낮 상관없이 윤곽선으로 학습하기 위한 윤곽선 이미지
+    edge = cv2.Canny(gray, 100, 200)
+    # 84x84로 리사이즈(이미지 축소 시 윤곽선이 날아가지 않기 위해 면적평균 보간)
+    resized = cv2.resize(edge, (84, 84), interpolation=cv2.INTER_AREA)
+    normalized = (resized / 255.0).astype(np.float32)
         
-    return gray
+    return resized
 
 def onclick(event):
     """Matplotlib 차트 위를 클릭했을 때 호출되는 콜백 함수"""

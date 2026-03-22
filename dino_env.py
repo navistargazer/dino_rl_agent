@@ -35,7 +35,7 @@ class DinoEnvironment:
         if self.done:
             self.reward = -10
         else:
-            self.reward = 0.1 if action == 0 else 0.05
+            self.reward = 0.1 if action == 0 else 0.0
 
         return self.state, self.reward, self.done
 
