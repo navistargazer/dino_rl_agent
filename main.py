@@ -36,7 +36,7 @@ def select_action(state, model, epsilon):
 def train_dino_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
     env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
-    replaybuffer  = ReplayBuffer(capacity=10000)         # 경험을 저장할 커다란 메모리 공간
+    replaybuffer  = ReplayBuffer(capacity=50000)         # 경험을 저장할 커다란 메모리 공간
     best_score = 0
     epsilon = 1.0
     total_steps = 0
@@ -115,7 +115,7 @@ def train_dino_agent():
         print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {total_reward:.2f} | Epsilon: {epsilon:.2f}")
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
-        epsilon = max(0.05, epsilon * 0.995)
+        epsilon = max(0.01, epsilon * 0.995)
         time.sleep(1)
 
 if __name__ == "__main__":
