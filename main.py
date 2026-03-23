@@ -16,8 +16,8 @@ import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
-model = DQN_CNN().to(device)        # 학습자의 두뇌
-target_model = DQN_CNN().to(device) # 목표 신경망
+model = DQN_CNN(num_actions=3).to(device)        # 학습자의 두뇌
+target_model = DQN_CNN(num_actions=3).to(device) # 목표 신경망
 optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
 
 def train_agent():
@@ -47,8 +47,9 @@ def train_agent():
 
 
     for episode in range(cf.NUM_EPISODES):
-        state, total_reward, done = env.restart_game()                  # 브라우저 초기화 및 게임 시작
+        state, total_reward, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
         frame_count = 0
+        # time.sleep(1)
         epi_start_time = time.time()
         while not done: 
             start = time.time()
@@ -61,22 +62,25 @@ def train_agent():
             
             # 3. 경험 저장 (방금 겪은 일을 메모리에 기록)
             replaybuffer.push(state, action, reward, next_state, done)
-            
+
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
             if len(replaybuffer) > cf.BATCH_SIZE:
                 batch = replaybuffer.sample(cf.BATCH_SIZE)
                 train_buffer(model, target_model, optimizer, batch, device)
-            
+
             # 5. 1000 프레임마다 타겟모델 업데이트
             total_steps += 1
             if (total_steps % cf.UPDATE_FREQ) == 0:
                 target_model.load_state_dict(model.state_dict())
                 print('타겟 모델 업데이트')
-            
+
             # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = time.time() - start
             if interval < cf.FRAME_INTERVAL:
                 time.sleep(cf.FRAME_INTERVAL - interval)
+            elif interval > cf.FRAME_INTERVAL + 0.01:
+                print(f'frame delayed: {interval - cf.FRAME_INTERVAL:.2f}sec')
+
             # 7. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             total_reward += reward
@@ -99,7 +103,6 @@ def train_agent():
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
-        time.sleep(1)
 
 if __name__ == "__main__":
     train_agent()

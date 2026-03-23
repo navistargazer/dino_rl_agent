@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import config as cf
 
 def train_buffer(model, target_model, optimizer, batch, device):
     # 1. 데이터 전처리 파트
@@ -41,7 +42,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
         target_next_q = target_model(next_states_tensor)
         max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
         # 벨만방정식의 정답지 공식(사망시 미래가치는 증발하는 것을 (1-dones)로 구현)
-        target_q = rewards_tensor + 0.99 * max_next_q_values * (1 - dones_tensor)
+        target_q = rewards_tensor + cf.GAMMA * max_next_q_values * (1 - dones_tensor)
     
     # 3. 역전파
     # 손실함수

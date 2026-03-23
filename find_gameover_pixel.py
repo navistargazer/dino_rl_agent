@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 # --- 사용자의 monitor 설정과 동일하게 맞추세요 ---
 # dql_vision.py에 설정된 monitor 값을 그대로 가져옵니다.
-monitor = {'top': 168, 'left': 191, 'width': 400, 'height': 88}
+monitor = {'top': 486, 'left': 186, 'width': 350, 'height': 85}
 sct = mss.mss()
 
 def capture_and_preprocess():
@@ -27,7 +27,7 @@ def capture_and_preprocess():
     resized = cv2.resize(edge, (84, 84), interpolation=cv2.INTER_AREA)
     normalized = (resized / 255.0).astype(np.float32)
         
-    return resized
+    return gray
 
 def onclick(event):
     """Matplotlib 차트 위를 클릭했을 때 호출되는 콜백 함수"""

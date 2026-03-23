@@ -79,7 +79,7 @@ class GetState:
         
         monitor_settings = {
             'top': ly - 30,  
-            'left': lx - 190,
+            'left': lx - 230,
             'width': game_logical_w,
             'height': game_logical_h
         }
@@ -103,8 +103,8 @@ class GetState:
         # gameover : 배경과 글씨 픽셀의 차이로 판단(낮과 밤 동시 적용됨)
         # self.isgameover = abs(int(gray[0, 0]) - int(gray[0, 185])) > 100.0
         # 맥과 윈도우의 픽셀 밀림을 영역으로 판단함으로써 해결
-        bg_pixel = int(gray[0, 0])
-        gameover = gray[0:3, 183:188].astype(int)
+        bg_pixel = int(gray[0, 100])
+        gameover = gray[0:3, 200:205].astype(int)
         diff_area = np.abs(gameover - bg_pixel)
         self.isgameover = np.max(diff_area) > 100
         # 밤/낮 상관없이 윤곽선으로 학습하기 위한 윤곽선 이미지

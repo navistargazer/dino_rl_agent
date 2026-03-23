@@ -2,6 +2,7 @@ from get_state import GetState
 import actions as act
 import numpy as np
 import torch
+import time
 
 class DinoEnvironment:
     def __init__(self):
@@ -12,7 +13,12 @@ class DinoEnvironment:
         act.click((self.get_state.monitor['left'], self.get_state.monitor['top']))
 
     def restart_game(self):
-        act.jump()
+        while self.get_state.isgameover:
+            act.jump()
+            act.wait()
+            time.sleep(0.02)
+            self.get_state.capture()
+
         self.state = self.get_state.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
@@ -20,7 +26,7 @@ class DinoEnvironment:
 
     def select_action(self, model, epsilon):
         if np.random.rand() < epsilon:
-            return np.random.choice([0, 1])
+            return np.random.randint(3)
         else:
             with torch.no_grad():
                 q_values = model.forward(self.state)
@@ -36,6 +42,10 @@ class DinoEnvironment:
         # action = 2(숙이기)라면 짧은 시간 기다림
         else:
             act.down()
+        
+        # chrome 렌더링 대기 시간
+        time.sleep(0.02)
+
         # 행동 이후 상태
         self.state = self.get_state.get_next_state()
         # 사망 판정
@@ -44,6 +54,11 @@ class DinoEnvironment:
         if self.done:
             self.reward = -10
         else:
-            self.reward = 0.1 if action == 0 else 0.0
+            if action == 0:
+                self.reward = 0.1
+            elif action == 1:
+                self.reward = 0.0
+            else:
+                self.reward = 0.05
         return self.state, self.reward, self.done
     
