@@ -15,15 +15,15 @@ class DQN_CNN(nn.Module):
         self.fc1 = nn.Linear(3136, 512)                                         # (1, 512)
         self.fc2 = nn.Linear(512, num_actions)                                  # (1, 2)
 
-    def forward(self, state):
+    def forward(self, x):
         # 합성곱-활성화 3번
-        state = F.relu(self.conv1(state))       # (1, 32, 20, 20)
-        state = F.relu(self.conv2(state))       # (1, 64, 9, 9)
-        state = F.relu(self.conv3(state))       # (1, 64, 7, 7)
+        x = F.relu(self.conv1(x))       # (1, 32, 20, 20)
+        x = F.relu(self.conv2(x))       # (1, 64, 9, 9)
+        x = F.relu(self.conv3(x))       # (1, 64, 7, 7)
         # 데이터를 1차원으로 flatten
-        state = state.view(state.size(0), -1)       # (1, 3136)
+        x = x.view(x.size(0), -1)       # (1, 3136)
         # FC 층
-        state = F.relu(self.fc1(state))         # (512)
+        x = F.relu(self.fc1(x))         # (512)
         # Q-Value 계산(행동별 점수)
-        q_values = self.fc2(state)          # (2)
+        q_values = self.fc2(x)          # (2)
         return q_values

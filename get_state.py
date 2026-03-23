@@ -1,25 +1,29 @@
 import cv2
 import numpy as np
-import mss
 import torch
+import mss
+from collections import deque
 
-# 💡 OS/해상도/템플릿 크기를 무시하는 궁극의 다중 비율 매칭 마법
-def get_monitor_settings_all_os(template_path='template.png'):
-    with mss.mss() as sct:
-        # 1. 모니터 전체 화면 캡처 (논리적 해상도 반환)
-        # ⭐️ 윈도우의 경우 디스플레이 배율(125%, 150%) 설정이 켜져있더라도 이 좌표는 스케일링되지 않은 논리 좌표입니다.
-        monitor = sct.monitors[1]
+
+class GetState:
+    def __init__(self):
+        self.sct = mss.mss()
+        self.monitor = self.find_monitor()
+        self.frames_stacked = deque(maxlen=4)
+        self.isgameover = False
+
+    def find_monitor(self, template_path='template.png'):
+        monitor = self.sct.monitors[1]
         
         # 실제 캡처한 이미지(full_screen)는 물리적(Physical) 해상도입니다. (레티나 등은 2배일 수 있음)
-        sct_img = sct.grab(monitor)
+        sct_img = self.sct.grab(monitor)
         full_screen = np.array(sct_img)
         full_screen_gray = cv2.cvtColor(full_screen, cv2.COLOR_BGRA2GRAY)
         
         # 2. 템플릿 이미지 로드
         template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
         if template is None:
-            print(f"❌ '{template_path}' 파일을 찾을 수 없습니다.")
-            return None
+            raise RuntimeError(f"❌ '{template_path}' 파일을 찾을 수 없습니다.")
             
         tH, tW = template.shape[:2]
         
@@ -29,7 +33,7 @@ def get_monitor_settings_all_os(template_path='template.png'):
         # np.linspace(0.5, 1.5, 20)은 [0.5, 0.552, ..., 1.5] 처럼 20개의 숫자를 만듭니다.
         scales = np.linspace(0.5, 1.5, 20)
         
-        print(f"🕵️‍♂️ 크기를 {scales[0]}~{scales[-1]}배까지 바꾸며 공룡을 스캔합니다. (20회 연산)")
+        print(f"게임오버 아이콘 크기를 {scales[0]}~{scales[-1]}배까지 바꾸며 검색(20회 연산)")
         
         for scale in scales:
             # 템플릿을 현재 비율로 resizing
@@ -53,11 +57,10 @@ def get_monitor_settings_all_os(template_path='template.png'):
         # ⭐️ 최고의 결과 확인
         (max_val, max_loc, scale) = found
         
-        print(f"✅ 최고의 인식률 발견: {max_val:.2f} (최적 비율: {scale:.2f}배)")
+        print(f"최고의 인식률 발견: {max_val:.2f} (최적 비율: {scale:.2f}배)")
         
         if max_val < 0.85: # 인식률이 0.85 이하면 믿을 수 없음
-            print("❌ 공룡을 찾지 못했습니다. 게임창을 띄우고 다시 실행해 주세요.")
-            return None
+            raise RuntimeError("게임오버 아이콘을 찾지 못했습니다. 게임창을 띄우고 다시 실행해 주세요.")
             
         # 4. 물리적 좌표(px, py)를 논리적 좌표(lx, ly)로 변환 (레티나 대응)
         # full_screen_gray가 물리적 해상도이므로 배율을 계산합니다.
@@ -72,25 +75,59 @@ def get_monitor_settings_all_os(template_path='template.png'):
         # 5. 찾은 공룡을 기준으로 게임 영역(MONITOR) 계산
         # 질문자님이 원하시는 게임창의 논리적 크기 (가로 600, 세로 200)
         game_logical_w = 350
-        game_logical_h = 82
+        game_logical_h = 85
         
         monitor_settings = {
             'top': ly - 30,  
-            'left': lx - 260,
+            'left': lx - 190,
             'width': game_logical_w,
             'height': game_logical_h
         }
         
-        print("\n✅ 궁극의 MONITOR 좌표를 찾았습니다!")
+        # print("\n✅ 궁극의 MONITOR 좌표를 찾았습니다!")
         print(f"MONITOR = {monitor_settings}")
         
         # 6. 시각적 확인 (팝업창)
-        check_img = sct.grab(monitor_settings)
+        check_img = self.sct.grab(monitor_settings)
         cv2.imshow("Check 캡처 영역 (Q를 누르면 종료)", cv2.cvtColor(np.array(check_img), cv2.COLOR_BGRA2BGR))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
         
         return monitor_settings
 
+    # 화면 프레임 캡처 - 게임오버도 판단
+    def capture(self):
+        screen = np.array(self.sct.grab(self.monitor))
+        # 수정 1: BGRA -> GRAY로 정확히 변환
+        gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY) 
+        # gameover : 배경과 글씨 픽셀의 차이로 판단(낮과 밤 동시 적용됨)
+        # self.isgameover = abs(int(gray[0, 0]) - int(gray[0, 185])) > 100.0
+        # 맥과 윈도우의 픽셀 밀림을 영역으로 판단함으로써 해결
+        bg_pixel = int(gray[0, 0])
+        gameover = gray[0:3, 183:188].astype(int)
+        diff_area = np.abs(gameover - bg_pixel)
+        self.isgameover = np.max(diff_area) > 100
+        # 밤/낮 상관없이 윤곽선으로 학습하기 위한 윤곽선 이미지
+        edge = cv2.Canny(gray, 100, 200)
+        # 84x84로 리사이즈(이미지 축소 시 윤곽선이 날아가지 않기 위해 면적평균 보간)
+        resized = cv2.resize(edge, (84, 84), interpolation=cv2.INTER_AREA)
+        normalized = (resized / 255.0).astype(np.float32)
+        return normalized
+
+    # 게임 진행용 함수 (매 프레임마다 호출)
+    def get_next_state(self, isfirst=False):
+        # 현재 프레임 생성
+        frame = self.capture()
+        # 게임 시작/재시작시에는 초기화 후 장 채움
+        if isfirst:
+            self.frames_stacked.clear()
+            self.frames_stacked.extend([frame] * 4)
+        else:
+            # 다음 스테이트 용으로 프레임 추가
+            self.frames_stacked.append(frame)
+        state = torch.from_numpy(np.stack(self.frames_stacked, axis=0)).unsqueeze(0)
+        return state
+
 if __name__ == "__main__":
-    get_monitor_settings_all_os()
+    state = GetState()
+    state.find_monitor()

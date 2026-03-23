@@ -7,49 +7,33 @@ import numpy as np
 import time
 import torch
 import torch.optim as optim
+import config as cf
 from dqn_cnn import DQN_CNN
 from dino_env import DinoEnvironment
 from replay_buffer import ReplayBuffer
 from train_buffer import train_buffer
 import os
 
-
-NUM_EPISODES = 10000 # 총 플레이할 게임 판 수
-BATCH_SIZE = 32     # 한 번 학습할 때 꺼내볼 과거 경험의 개수
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
 model = DQN_CNN().to(device)        # 학습자의 두뇌
 target_model = DQN_CNN().to(device) # 목표 신경망
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
 
-
-# 2. 현재 상태에 맞는 동작(action) 실행 - 동작:3(0-아무것도 안함, 1-점프, 2-숙이기)
-def select_action(state, model, epsilon):
-    # epsilon보다 작은 경우는 랜덤 행동, 크면 q-value에 의한 행동
-    if np.random.rand() < epsilon:
-        return np.random.choice([0, 1])
-    else:
-        with torch.no_grad():               # 가중치 저장 안함(미분x, 역전파x)
-            q_values = model.forward(state) # 현재 상태의 q값
-            return torch.argmax(q_values).item()    # 가장 큰 값의 인덱스에 있는 숫자(int)를 반환 -> q값이 [0.1, 0.8]인 경우 1번 인덱스의 item인 1을 반환
-
-def train_dino_agent():
+def train_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
-    env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
-    replaybuffer  = ReplayBuffer(capacity=50000)         # 경험을 저장할 커다란 메모리 공간
+    replaybuffer  = ReplayBuffer(capacity=cf.REPLAYBUFFER_SIZE)         # 경험을 저장할 커다란 메모리 공간
     best_score = 0
     epsilon = 1.0
     total_steps = 0
-    update_freq = 1000
     
     # 학습 이어하기(모델 저장 파일 로드)
-    model_path = 'best_model.pth'
+    model_path = 'models/best_model.pth'
     if os.path.exists(model_path):
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint['model_state_dict'])
         best_score = checkpoint['best_score']
         epsilon = checkpoint['epsilon']
-        update_freq = checkpoint['update_freq']
         print(f'이어서 학습 시작 (기존 최고 생존: {best_score} / Epsilon: {epsilon:.3f})')
     else:
         best_score = 0
@@ -62,14 +46,14 @@ def train_dino_agent():
     target_model.eval()
 
 
-    for episode in range(NUM_EPISODES):
+    for episode in range(cf.NUM_EPISODES):
         state, total_reward, done = env.restart_game()                  # 브라우저 초기화 및 게임 시작
         frame_count = 0
         epi_start_time = time.time()
         while not done: 
             start = time.time()
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
-            action = select_action(state, model, epsilon) 
+            action = env.select_action(model, epsilon) 
                         
             # 2. 1스텝 진행(다음 상태 확인)
             frame_count += 1
@@ -79,20 +63,20 @@ def train_dino_agent():
             replaybuffer.push(state, action, reward, next_state, done)
             
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-            if len(replaybuffer) > BATCH_SIZE:
-                batch = replaybuffer.sample(BATCH_SIZE)
+            if len(replaybuffer) > cf.BATCH_SIZE:
+                batch = replaybuffer.sample(cf.BATCH_SIZE)
                 train_buffer(model, target_model, optimizer, batch, device)
             
             # 5. 1000 프레임마다 타겟모델 업데이트
             total_steps += 1
-            if (total_steps % update_freq) == 0:
+            if (total_steps % cf.UPDATE_FREQ) == 0:
                 target_model.load_state_dict(model.state_dict())
                 print('타겟 모델 업데이트')
             
             # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = time.time() - start
-            if interval < 0.066:
-                time.sleep(0.066 - interval)
+            if interval < cf.FRAME_INTERVAL:
+                time.sleep(cf.FRAME_INTERVAL - interval)
             # 7. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             total_reward += reward
@@ -107,16 +91,15 @@ def train_dino_agent():
                 'model_state_dict': model.state_dict(),
                 'best_score': best_score,
                 'epsilon': epsilon,
-                'update_freq': update_freq,
             }
-            torch.save(checkpoint, 'best_model.pth')
+            torch.save(checkpoint, 'models/best_model.pth')
             print('Best model saved!')
 
         print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {total_reward:.2f} | Epsilon: {epsilon:.2f}")
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
-        epsilon = max(0.01, epsilon * 0.995)
+        epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
         time.sleep(1)
 
 if __name__ == "__main__":
-    train_dino_agent()
+    train_agent()
