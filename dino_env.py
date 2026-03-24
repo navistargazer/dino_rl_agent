@@ -10,11 +10,11 @@ class DinoEnvironment:
         self.state = self.get_state.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
-        act.click((self.get_state.monitor['left'], self.get_state.monitor['top']))
+        self.coord = (self.get_state.monitor['left'], self.get_state.monitor['top'])
+        act.click(self.coord)
 
     def restart_game(self):
         start = time.time()
-
         while self.get_state.isgameover:
             act.jump()
             act.wait()

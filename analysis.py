@@ -11,7 +11,7 @@ def visualize_q_values(q_values_history, loss_history):
     plt.grid(True)
 
     plt.subplot(1, 2, 2)
-    plt.plot(loss_history, color='r', label='Loss')
+    plt.plot(loss_history, color='r', label='Average Loss')
     plt.xlabel('Episode')
     plt.ylabel('Loss')
     plt.legend()
