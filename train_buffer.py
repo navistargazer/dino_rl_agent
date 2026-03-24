@@ -27,7 +27,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
     q_values = model(states_tensor)                          # (32, 2)
     # 그중에 실제로 수행한 action들의 q밸류(gaher로 행동별 인덱스의 q값만 추출)
     acted_q = q_values.gather(dim=1, index=actions_tensor)  # (32, 1)
-
+    avg_q = acted_q.mean().item()
 
     # 미래에 획득할 가치(수치확인만이 목적이므로 가중치 수정이 안되도록 기울기 추적을 끊는다)
     with torch.no_grad():
@@ -53,6 +53,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
     loss.backward()
     # 가중치 업데이트
     optimizer.step()    
+    return loss.item(), avg_q
 
 
 
