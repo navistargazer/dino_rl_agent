@@ -48,7 +48,11 @@ def record_video():
             video_writer.write(frame)
 
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
-            action = env.select_action(model, epsilon) 
+            q_values = env.get_q_values(model)
+            if np.random.rand() < epsilon:
+                action = np.random.randint(3)
+            else:
+                action = torch.argmax(q_values).item()
                         
             # 2. 1스텝 진행(다음 상태 확인)
             next_state, reward, done = env.step(action)

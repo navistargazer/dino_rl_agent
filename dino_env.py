@@ -30,17 +30,14 @@ class DinoEnvironment:
         self.state = self.get_state.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
-        return self.state, self.reward, self.done
+        return self.state, self.done
 
-    def select_action(self, model, epsilon):
-        if np.random.rand() < epsilon:
-            return np.random.randint(3)
-        else:
-            with torch.no_grad():
-                device = next(model.parameters()).device
-                state_dev = self.state.to(device)
-                q_values = model(state_dev)
-                return torch.argmax(q_values).item()
+    def get_q_values(self, model):
+        with torch.no_grad():
+            device = next(model.parameters()).device
+            state_dev = self.state.to(device)
+            q_values = model(state_dev)
+            return q_values
 
     def step(self, action):
         # action = 0(아무것도 안함)이라면 1프레임 기다림

@@ -7,6 +7,7 @@ import numpy as np
 import time
 import torch
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 import config as cf
 from dqn_cnn import DQN_CNN
 from dino_env import DinoEnvironment
@@ -26,6 +27,7 @@ env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 �
 model = DQN_CNN(num_actions=3).to(device)        # 학습자의 두뇌
 target_model = DQN_CNN(num_actions=3).to(device) # 목표 신경망
 optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
+writer = SummaryWriter('runs/dino_ex_1')    # run/dino_ex_1 폴더에 로그가 쌓임
 
 def train_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
@@ -33,8 +35,7 @@ def train_agent():
     best_score = 0
     epsilon = 1.0
     total_steps = 0
-    q_values_history = []
-    loss_history = []
+
     
     # 학습 이어하기(모델 저장 파일 로드)
     model_path = 'models/best_model.pth'
@@ -54,35 +55,37 @@ def train_agent():
     # 타겟 모델은 학습 없이 평가모드로
     target_model.eval()
 
-
     for episode in range(cf.NUM_EPISODES):
-        state, total_reward, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
-        frame_count = 0
+        state, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
         # time.sleep(1)
-        epi_start_time = time.time()
         # q-value 시각화 준비
-        epi_q_sum = 0.0
-        epi_loss_sum = 0.0
-        epi_train_count = 0
+        epi_start_time = time.time()
+        epi_frame_cnt = 0
+        reward_sum = 0.0
+        q_value_sum = 0.0
         while not done: 
             start = time.time()
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
-            action = env.select_action(model, epsilon) 
+            q_values = env.get_q_values(model)
+            max_q = torch.max(q_values).item()
+            q_value_sum += max_q
+
+            if np.random.rand() < epsilon:
+                action = np.random.randint(3)
+            else:
+                action = torch.argmax(q_values).item()
                         
             # 2. 1스텝 진행(다음 상태 확인)
-            frame_count += 1
+            epi_frame_cnt += 1
             next_state, reward, done = env.step(action)
-
+            
             # 3. 경험 저장 (방금 겪은 일을 메모리에 기록)
             replaybuffer.push(state, action, reward, next_state, done)
 
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
             if len(replaybuffer) > cf.BATCH_SIZE:
                 batch = replaybuffer.sample(cf.BATCH_SIZE)
-                loss, avg_q = train_buffer(model, target_model, optimizer, batch, device)
-                epi_q_sum += avg_q
-                epi_loss_sum += loss
-                epi_train_count += 1
+                train_buffer(model, target_model, optimizer, batch, device)
 
             # 5. 1000 프레임마다 타겟모델 업데이트
             total_steps += 1
@@ -99,10 +102,7 @@ def train_agent():
 
             # 7. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
-            total_reward += reward
-
-        # 생존 시간 계산
-        survival_time = time.time() - epi_start_time
+            reward_sum += reward
 
         # 베스트 모델 저장
         if survival_time > best_score:
@@ -115,22 +115,21 @@ def train_agent():
             torch.save(checkpoint, 'models/best_model.pth')
             print('Best model saved!')
 
-        print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {total_reward:.2f} | Epsilon: {epsilon:.2f}")
+        # 에피소드 종료
+        survival_time = time.time() - epi_start_time
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
-        # q-value 시각화
-        if epi_train_count > 0:
-            q_values_history.append(epi_q_sum / epi_train_count)
-            loss_history.append(epi_loss_sum / epi_train_count)
-        else:
-            q_values_history.append(0.0)
-            loss_history.append(0.0)
+
+        # 텐서보드 로그
+        avg_q_values = q_value_sum / epi_frame_cnt
+        writer.add_scalar('Perfomance/1_Survival_Time', survival_time, episode)
+        writer.add_scalar('Perfomance/2_Total Reward', reward_sum, episode)
+        writer.add_scalar('Brain/Average Q-Value', avg_q_values, episode)
+        writer.add_scalar('Epsilon', epsilon, episode)
+        # 결과 출력
+        print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {epsilon:.2f}")
+    writer.close()
         
-        if episode % 10 == 0:
-            analysis.visualize_q_values(q_values_history, loss_history)
-
-
-
 if __name__ == "__main__":
     train_agent()

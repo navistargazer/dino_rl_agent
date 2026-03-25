@@ -130,4 +130,3 @@ class GetState:
 
 if __name__ == "__main__":
     state = GetState()
-    state.find_monitor()
