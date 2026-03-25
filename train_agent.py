@@ -15,7 +15,13 @@ from train_buffer import train_buffer
 import os
 import analysis
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+elif torch.backends.mps.is_available(): # ⭐️ M1/M2 맥을 위한 가속 장치!
+    device = torch.device("mps")
+    print("Mac GPU (MPS) 가동!")
+else:
+    device = torch.device("cpu")
 env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
 model = DQN_CNN(num_actions=3).to(device)        # 학습자의 두뇌
 target_model = DQN_CNN(num_actions=3).to(device) # 목표 신경망

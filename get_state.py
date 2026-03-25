@@ -75,7 +75,7 @@ class GetState:
         # 5. 찾은 공룡을 기준으로 게임 영역(MONITOR) 계산
         # 질문자님이 원하시는 게임창의 논리적 크기 (가로 600, 세로 200)
         game_logical_w = 350
-        game_logical_h = 85
+        game_logical_h = 84
         
         monitor_settings = {
             'top': ly - 30,  
@@ -110,7 +110,7 @@ class GetState:
         # 밤/낮 상관없이 윤곽선으로 학습하기 위한 윤곽선 이미지
         edge = cv2.Canny(gray, 100, 200)
         # 84x84로 리사이즈(이미지 축소 시 윤곽선이 날아가지 않기 위해 면적평균 보간)
-        resized = cv2.resize(edge, (84, 84), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(edge, (64, 64), interpolation=cv2.INTER_AREA)
         normalized = (resized / 255.0).astype(np.float32)
         return normalized
 

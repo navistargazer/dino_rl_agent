@@ -34,7 +34,9 @@ class DinoEnvironment:
             return np.random.randint(3)
         else:
             with torch.no_grad():
-                q_values = model.forward(self.state)
+                device = next(model.parameters()).device
+                state_dev = self.state.to(device)
+                q_values = model(state_dev)
                 return torch.argmax(q_values).item()
 
     def step(self, action):
