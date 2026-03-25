@@ -74,12 +74,12 @@ class GetState:
         
         # 5. 찾은 공룡을 기준으로 게임 영역(MONITOR) 계산
         # 질문자님이 원하시는 게임창의 논리적 크기 (가로 600, 세로 200)
-        game_logical_w = 350
+        game_logical_w = 384
         game_logical_h = 84
         
         monitor_settings = {
             'top': ly - 30,  
-            'left': lx - 230,
+            'left': lx - 250,
             'width': game_logical_w,
             'height': game_logical_h
         }
