@@ -9,6 +9,7 @@ import config as cf
 from dqn_cnn import DQN_CNN
 from dino_env import DinoEnvironment
 import os
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
@@ -22,9 +23,9 @@ def test_agent():
     model.eval()
     epsilon = 0.0
     for episode in range(cf.NUM_EPISODES):
-        state, total_reward, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
+        state, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
         epi_start_time = time.time()
-
+        total_reward = 0.0
         while not done: 
             start = time.time()
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)

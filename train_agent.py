@@ -31,7 +31,7 @@ writer = SummaryWriter('runs/dino_ex_1')    # run/dino_ex_1 폴더에 로그가 
 
 def train_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
-    replaybuffer  = ReplayBuffer(capacity=cf.REPLAYBUFFER_SIZE)         # 경험을 저장할 커다란 메모리 공간
+    replaybuffer  = ReplayBuffer(priority_cap=cf.P_BUFFER_SIZE, normal_cap=cf.N_BUFFER_SIZE, priority_ratio=0.5)         # 경험을 저장할 커다란 메모리 공간
     best_score = 0
     epsilon = 1.0
     total_steps = 0
@@ -54,6 +54,9 @@ def train_agent():
     target_model.load_state_dict(model.state_dict())
     # 타겟 모델은 학습 없이 평가모드로
     target_model.eval()
+
+    history_q_values = []
+    history_reward = []
 
     for episode in range(cf.NUM_EPISODES):
         state, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
@@ -80,7 +83,7 @@ def train_agent():
             next_state, reward, done = env.step(action)
             
             # 3. 경험 저장 (방금 겪은 일을 메모리에 기록)
-            replaybuffer.push(state, action, reward, next_state, done)
+            replaybuffer.push((state, action, reward, next_state, done))
 
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
             if len(replaybuffer) > cf.BATCH_SIZE:
@@ -91,7 +94,7 @@ def train_agent():
             total_steps += 1
             if (total_steps % cf.UPDATE_FREQ) == 0:
                 target_model.load_state_dict(model.state_dict())
-                print('타겟 모델 업데이트')
+                # print('타겟 모델 업데이트')
 
             # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = time.time() - start
@@ -103,7 +106,10 @@ def train_agent():
             # 7. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             reward_sum += reward
-
+        # 에피소드 종료
+        # 생존시간
+        survival_time = time.time() - epi_start_time
+        
         # 베스트 모델 저장
         if survival_time > best_score:
             best_score = survival_time
@@ -115,20 +121,22 @@ def train_agent():
             torch.save(checkpoint, 'models/best_model.pth')
             print('Best model saved!')
 
-        # 에피소드 종료
-        survival_time = time.time() - epi_start_time
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
 
         # 텐서보드 로그
         avg_q_values = q_value_sum / epi_frame_cnt
-        writer.add_scalar('Perfomance/1_Survival_Time', survival_time, episode)
-        writer.add_scalar('Perfomance/2_Total Reward', reward_sum, episode)
+        writer.add_scalar('Performance/1_Survival_Time', survival_time, episode)
+        writer.add_scalar('Performance/2_Total_Reward', reward_sum, episode)
         writer.add_scalar('Brain/Average Q-Value', avg_q_values, episode)
-        writer.add_scalar('Epsilon', epsilon, episode)
+        # writer.flush()
         # 결과 출력
-        print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {epsilon:.2f}")
+        print(f"Episode: {episode} | Survived: {survival_time:.2f} | AVG_Q: {avg_q_values:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {epsilon:.2f}")
+        history_q_values.append(avg_q_values)
+        history_reward.append(reward_sum)
+        # if episode % 10 == 0:
+        analysis.visualize_q_values(history_reward, history_q_values)
     writer.close()
         
 if __name__ == "__main__":

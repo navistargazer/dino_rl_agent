@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 
 # --- 사용자의 monitor 설정과 동일하게 맞추세요 ---
 # dql_vision.py에 설정된 monitor 값을 그대로 가져옵니다.
-monitor = {'top': 486, 'left': 186, 'width': 350, 'height': 85}
+monitor = {'top': 168, 'left': 215, 'width': 384, 'height': 84}
 sct = mss.mss()
 
-def capture_and_preprocess():
+def capture_and_preprocess(monitor=monitor):
     """게임을 플레이하다가 죽었을 때 호출: 화면을 캡처하고 84x84 흑백으로 변환"""
     print("\n--- [도구] Game Over 화면 캡처 시작 ---")
     print("1. 크롬 공룡 게임을 켭니다.")
@@ -24,7 +24,7 @@ def capture_and_preprocess():
     # 밤/낮 상관없이 윤곽선으로 학습하기 위한 윤곽선 이미지
     edge = cv2.Canny(gray, 100, 200)
     # 84x84로 리사이즈(이미지 축소 시 윤곽선이 날아가지 않기 위해 면적평균 보간)
-    resized = cv2.resize(edge, (84, 84), interpolation=cv2.INTER_AREA)
+    resized = cv2.resize(edge, (64, 64), interpolation=cv2.INTER_AREA)
     normalized = (resized / 255.0).astype(np.float32)
         
     return gray

@@ -79,7 +79,7 @@ class GetState:
         
         monitor_settings = {
             'top': ly - 30,  
-            'left': lx - 250,
+            'left': lx - 230,
             'width': game_logical_w,
             'height': game_logical_h
         }
