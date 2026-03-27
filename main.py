@@ -55,14 +55,15 @@ def train_dino_agent():
     replaybuffer  = ReplayBuffer(capacity=10000)         # 경험을 저장할 커다란 메모리 공간
     
     epsilon = 1.0                 # 초기 탐험 확률 (처음엔 100% 무작위 행동)
-    best_score = 0
-
+    best_score = 0.0
+    
     for episode in range(NUM_EPISODES):
         # ----------------------------------------------------
         # [게임 한 판(Episode) 시작]
         # ----------------------------------------------------
         state, total_reward, done = env.restart_game()                  # 브라우저 초기화 및 게임 시작
         frame_count = 0
+        start_time = time.time()
         while not done: 
             # ----------------------------------------------------
             # [1 Step 진행 (매 프레임마다 일어나는 일)]
@@ -72,29 +73,23 @@ def train_dino_agent():
             action = select_action(state, model, epsilon) 
             
             # 3. 환경과 상호작용 (키보드 누르고, 스킵 대기하고, 결과 받기)
-            # 앞서 말씀드린 time.sleep(0.06) 같은 타이밍 조절이 이 안에서 일어납니다.
             next_state, reward, done = env.step(action)
-            
-            interval = time.time() - start
-            if interval < 0.066:
-                time.sleep(0.066 - interval)
             frame_count += 1
+            
 
             # # 4. 경험 저장 (방금 겪은 일을 메모리에 기록)
             replaybuffer.push(state, action, reward, next_state, done)
             
             # # 5. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
             if len(replaybuffer) > BATCH_SIZE:
-                training_iteration = min(frame_count, 500)  # 훈련 상한 설정
-                for _ in range(training_iteration):
-                    batch = replaybuffer.sample(BATCH_SIZE)
-                    train_buffer(model, optimizer, batch, device)
+                batch = replaybuffer.sample(BATCH_SIZE)
+                train_buffer(model, optimizer, batch, device)
             
-            # 6. 베스트 모델 저장
-            if frame_count > best_score:
-                best_score = frame_count
-                torch.save(model.state_dict(), 'best_model.pth')
-                print('Best model saved!')
+
+            # 앞서 말씀드린 time.sleep(0.06) 같은 타이밍 조절이 이 안에서 일어납니다.
+            interval = time.time() - start
+            if interval < 0.066:
+                time.sleep(0.066 - interval)
 
             # 6. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
@@ -102,11 +97,18 @@ def train_dino_agent():
         # ----------------------------------------------------
         # [게임 한 판 종료]
         # ----------------------------------------------------
-        print(f"Episode: {episode} | Score: {frame_count} | Total Reward: {total_reward} | Epsilon: {epsilon:.2f}")
+        print()
+        survived_time = time.time() - start_time
+        print(f"Episode: {episode} | Survived: {survived_time:.3f}s | Total Reward: {total_reward} | Epsilon: {epsilon:.2f}")
+        # 6. 베스트 모델 저장
+        if survived_time > best_score:
+            best_score = survived_time
+            torch.save(model.state_dict(), 'best_model.pth')
+            print('Best model saved!')
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = update_epsilon(epsilon) 
-        time.sleep(1)
+        time.sleep(2)
 
 if __name__ == "__main__":
     gw.setup_game_window()
