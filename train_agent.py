@@ -24,13 +24,18 @@ elif torch.backends.mps.is_available(): # ⭐️ M1/M2 맥을 위한 가속 장�
 else:
     device = torch.device("cpu")
 env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
+# online model
 model = DQN_CNN(num_actions=3).to(device)        # 학습자의 두뇌
+#target model
 target_model = DQN_CNN(num_actions=3).to(device) # 목표 신경망
+
 optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
+
 writer = SummaryWriter('runs/dino_ex_1')    # run/dino_ex_1 폴더에 로그가 쌓임
 
 def train_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
+    frame_time = 1.0 / cf.FPS
     replaybuffer  = ReplayBuffer(priority_cap=cf.P_BUFFER_SIZE, normal_cap=cf.N_BUFFER_SIZE, priority_ratio=0.5)         # 경험을 저장할 커다란 메모리 공간
     best_score = 0
     epsilon = 1.0
@@ -50,10 +55,12 @@ def train_agent():
         epsilon = 1.0
         print('새로운 학습 시작')
 
-    # 타겟 모델에 모델의 상태 저장
-    target_model.load_state_dict(model.state_dict())
-    # 타겟 모델은 학습 없이 평가모드로
-    target_model.eval()
+    # dqn 버전이 올라가면 타겟 모델 등장
+    if (cf.DQN_VER > 0):
+        # 타겟 모델에 모델의 상태 저장
+        target_model.load_state_dict(model.state_dict())
+        # 타겟 모델은 학습 없이 평가모드로
+        target_model.eval()
 
     history_q_values = []
     history_survived = []
@@ -66,16 +73,17 @@ def train_agent():
         epi_frame_cnt = 1
         reward_sum = 0.0
         q_value_sum = 0.0
+        fps = cf.FPS
         while not done: 
             start = time.time()
+            if epi_frame_cnt > fps:
+                print('#', end='')
+                fps += cf.FPS
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
             q_values = env.get_q_values(model)
             max_q = torch.max(q_values).item()
             q_value_sum += max_q
 
-            # 후반부에서 탐험 
-            if epi_frame_cnt > 500:
-                epsilon = 0.05
             if np.random.rand() < epsilon:
                 action = np.random.randint(3)
             else:
@@ -89,23 +97,23 @@ def train_agent():
             replaybuffer.push((state, action, reward, next_state, done))
 
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-            # if len(replaybuffer) > cf.BATCH_SIZE:
-            if episode > 10:
+            if len(replaybuffer) > cf.BATCH_SIZE:
+            # if episode > 10:
                 batch = replaybuffer.sample(cf.BATCH_SIZE)
                 train_buffer(model, target_model, optimizer, batch, device)
 
             # 5. 1000 프레임마다 타겟모델 업데이트
             total_steps += 1
-            if (total_steps % cf.UPDATE_FREQ) == 0:
+            if cf.DQN_VER > 0  and (total_steps % cf.UPDATE_FREQ) == 0:
                 target_model.load_state_dict(model.state_dict())
                 # print('타겟 모델 업데이트')
 
             # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = time.time() - start
-            if interval < cf.FRAME_INTERVAL:
-                time.sleep(cf.FRAME_INTERVAL - interval)
-            elif interval > cf.FRAME_INTERVAL + 0.01:
-                print(f'frame delayed: {interval - cf.FRAME_INTERVAL:.2f}sec')
+            if interval < frame_time:
+                time.sleep(frame_time - interval)
+            elif interval > frame_time + 0.01:
+                print(f'frame delayed: {interval - frame_time:.3f}sec')
 
             # 7. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
@@ -123,7 +131,9 @@ def train_agent():
                 'epsilon': epsilon,
             }
             torch.save(checkpoint, 'models/best_model.pth')
-            print('Best model saved!')
+            print('\nBest model saved!')
+        else:
+            print()
 
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)

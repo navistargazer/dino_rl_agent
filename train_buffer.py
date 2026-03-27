@@ -31,16 +31,27 @@ def train_buffer(model, target_model, optimizer, batch, device):
 
     # 미래에 획득할 가치(수치확인만이 목적이므로 가중치 수정이 안되도록 기울기 추적을 끊는다)
     with torch.no_grad():
-        # # target dqn - target이 행동을 고르고 평가도 함
-        # # 미래 가치들 확인
-        # next_q_values = target_model(next_states_tensor)           # (32, 2)
-        # # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
-        # max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
-        # double dqn - model이 최선행동을 고르고, target이 평가
-        online_next_q = model(next_states_tensor)
-        best_actions = online_next_q.argmax(dim=1, keepdim=True)
-        target_next_q = target_model(next_states_tensor)
-        max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
+        # 0. 초기 dqn : 현행 모델이 다음상태를 계산하고 최대가치를 직접 계산 -> 가중치 변경 때문에 목표가 끊임없이 움직이는 문제
+        if cf.DQN_VER == 0:
+            next_q_values = model(next_states_tensor)
+            max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
+        # 1. nature dqn : target이 다음상태의 가치를 계산 -> 고정된 과녁이나, 타겟이 과대평가할 가능성 존재
+        elif cf.DQN_VER == 1:
+            # 미래 가치들 확인
+            next_q_values = target_model(next_states_tensor)           # (32, 2)
+            # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
+            max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
+        # 2. double dqn : 현행 모델이 최선행동을 고르면 타겟모델이 그 가치를 평가 -> 과대평가 가능성 차단
+        else:
+            # 현행 모델이 다음스텝의 상태를 계산
+            online_next_q = model(next_states_tensor)
+            # 현행 모델이 최선행동을 선택
+            best_actions = online_next_q.argmax(dim=1, keepdim=True)
+            # 타겟 모델이 과거의 가중치를 바탕으로 다음 상태를 계산
+            target_next_q = target_model(next_states_tensor)
+            # 타겟 모델이 현행모델의 최선행동을 평가함
+            max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
+            
         # 벨만방정식의 정답지 공식(사망시 미래가치는 증발하는 것을 (1-dones)로 구현)
         target_q = rewards_tensor + cf.GAMMA * max_next_q_values * (1 - dones_tensor)
     
@@ -52,9 +63,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
     # 역전파
     loss.backward()
     # 가중치 업데이트
-    optimizer.step()    
-    return loss.item(), avg_q
-
+    optimizer.step()
 
 
 

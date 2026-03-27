@@ -1,8 +1,7 @@
 from collections import deque
 import numpy as np
 import random
-
-
+import config as cf
 
 class ReplayBuffer:
     def __init__(self, priority_cap=2000, normal_cap=8000, priority_ratio=0.5):
@@ -14,6 +13,10 @@ class ReplayBuffer:
     # 버퍼 메모리에 tuple 저장
     def push(self, memory):
         # memory = (state, action, reward, next_state, done)
+        # 단일버퍼이면
+        if cf.DUAL_BUFFER == 0:
+            self.n_buffer.append(memory)
+            return
         # 사망했거나, 점프/숙이기 동작을 한 것은 우선도 높은 기억
         if memory[-1] or memory[1] in [1, 2]:
             self.p_buffer.append(memory)
@@ -24,7 +27,7 @@ class ReplayBuffer:
     # batch 수 만큼 랜덤 샘플링
     def sample(self, batch_size):
         # 우선도 버퍼에서 뽑을 샘플 숫자
-        p_size = int(batch_size * self.p_ratio)
+        p_size = int(batch_size * self.p_ratio) if cf.DUAL_BUFFER == 1 else 0
         n_size = batch_size - p_size
 
         # 우선도 버퍼에서 뽑을 숫자가 모자라는 경우
