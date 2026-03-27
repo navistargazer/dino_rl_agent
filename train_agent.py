@@ -56,7 +56,7 @@ def train_agent():
         print('새로운 학습 시작')
 
     # dqn 버전이 올라가면 타겟 모델 등장
-    if (cf.DQN_VER > 0):
+    if cf.DQN_VER > 0:
         # 타겟 모델에 모델의 상태 저장
         target_model.load_state_dict(model.state_dict())
         # 타겟 모델은 학습 없이 평가모드로
@@ -72,7 +72,7 @@ def train_agent():
         epi_start_time = time.time()
         epi_frame_cnt = 1
         reward_sum = 0.0
-        q_value_sum = 0.0
+        first_q = 0.0
         fps = cf.FPS
         while not done: 
             start = time.time()
@@ -82,8 +82,9 @@ def train_agent():
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
             q_values = env.get_q_values(model)
             max_q = torch.max(q_values).item()
-            q_value_sum += max_q
-
+            # 에피소드 시작 시 최대 Q값을 시각화 
+            if (epi_frame_cnt == 1):
+                first_q = max_q
             if np.random.rand() < epsilon:
                 action = np.random.randint(3)
             else:
@@ -123,7 +124,7 @@ def train_agent():
         survival_time = time.time() - epi_start_time
         
         # 베스트 모델 저장
-        if survival_time > best_score:
+        if (episode > cf.NUM_EPISODES - 50) and survival_time > best_score:
             best_score = survival_time
             checkpoint = {
                 'model_state_dict': model.state_dict(),
@@ -140,15 +141,14 @@ def train_agent():
         epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
 
         # 텐서보드 로그
-        avg_q_values = q_value_sum / epi_frame_cnt
         writer.add_scalar('Performance/1_Survival_Time', survival_time, episode)
         writer.add_scalar('Performance/2_Total_Reward', reward_sum, episode)
-        writer.add_scalar('Brain/Average Q-Value', avg_q_values, episode)
+        writer.add_scalar('Brain/Max Q-Value', first_q, episode)
         # writer.flush()
         # 결과 출력
-        print(f"Episode: {episode} | Survived: {survival_time:.2f} | AVG_Q: {avg_q_values:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {epsilon:.2f}")
-        history_q_values.append(avg_q_values)
-        history_survived.append(reward_sum)
+        print(f"Episode: {episode} | Survived: {survival_time:.2f} | Max_Q: {first_q:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {epsilon:.2f}")
+        history_q_values.append(first_q)
+        history_survived.append(survival_time)
         # if episode % 10 == 0:
         analysis.visualize_q_values(history_survived, history_q_values)
     writer.close()
