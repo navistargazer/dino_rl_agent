@@ -16,7 +16,7 @@ import os
 
 
 MONITOR = {'top': 170, 'left': 140, 'width': 300, 'height': 80}
-NUM_EPISODES = 10000 # 총 플레이할 게임 판 수
+NUM_EPISODES = 1000 # 총 플레이할 게임 판 수
 BATCH_SIZE = 32     # 한 번 학습할 때 꺼내볼 과거 경험의 개수
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -89,21 +89,19 @@ def train_dino_agent():
             # # 4. 경험 저장 (방금 겪은 일을 메모리에 기록)
             replaybuffer.push(state, action, reward, next_state, done)
             
+            # # 5. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
+            if len(replaybuffer) > BATCH_SIZE:
+                batch = replaybuffer.sample(BATCH_SIZE)
+                train_buffer(model, target_model, optimizer, batch, device)
+            if total_steps % TARGET_UPDATE_FREQ == 0:
+                target_model.load_state_dict(model.state_dict())
+
             # 6. 상태 업데이트 (다음 스텝을 위해)
             state = next_state
             total_reward += reward
-
         # 생존 시간 계산
         survival_time = time.time() - epi_start_time
 
-        # # 5. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-        if len(replaybuffer) > BATCH_SIZE:
-            training_iteration = min(frame_count, 500)  # 훈련 상한 설정
-            for _ in range(training_iteration):
-                batch = replaybuffer.sample(BATCH_SIZE)
-                train_buffer(model, target_model, optimizer, batch, device)
-        if total_steps % TARGET_UPDATE_FREQ == 0:
-            target_model.load_state_dict(model.state_dict())
         
         # 6. 베스트 모델 저장
         if survival_time > best_score:
@@ -115,12 +113,13 @@ def train_dino_agent():
             }
             torch.save(checkpoint, 'best_model.pth')
             print('Best model saved!')
-
+        else:
+            print()
         print(f"Episode: {episode} | Survived: {survival_time:.2f} | Total Reward: {total_reward:.2f} | Epsilon: {epsilon:.2f}")
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = update_epsilon(epsilon) 
-        time.sleep(1)
+        time.sleep(1.5)
 
 if __name__ == "__main__":
     gw.setup_game_window()
