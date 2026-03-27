@@ -56,14 +56,14 @@ def train_agent():
     target_model.eval()
 
     history_q_values = []
-    history_reward = []
+    history_survived = []
 
     for episode in range(cf.NUM_EPISODES):
         state, done = env.restart_game()               # 브라우저 초기화 및 게임 시작
         # time.sleep(1)
         # q-value 시각화 준비
         epi_start_time = time.time()
-        epi_frame_cnt = 0
+        epi_frame_cnt = 1
         reward_sum = 0.0
         q_value_sum = 0.0
         while not done: 
@@ -73,6 +73,9 @@ def train_agent():
             max_q = torch.max(q_values).item()
             q_value_sum += max_q
 
+            # 후반부에서 탐험 
+            if epi_frame_cnt > 500:
+                epsilon = 0.05
             if np.random.rand() < epsilon:
                 action = np.random.randint(3)
             else:
@@ -86,7 +89,8 @@ def train_agent():
             replaybuffer.push((state, action, reward, next_state, done))
 
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-            if len(replaybuffer) > cf.BATCH_SIZE:
+            # if len(replaybuffer) > cf.BATCH_SIZE:
+            if episode > 10:
                 batch = replaybuffer.sample(cf.BATCH_SIZE)
                 train_buffer(model, target_model, optimizer, batch, device)
 
@@ -134,9 +138,9 @@ def train_agent():
         # 결과 출력
         print(f"Episode: {episode} | Survived: {survival_time:.2f} | AVG_Q: {avg_q_values:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {epsilon:.2f}")
         history_q_values.append(avg_q_values)
-        history_reward.append(reward_sum)
+        history_survived.append(reward_sum)
         # if episode % 10 == 0:
-        analysis.visualize_q_values(history_reward, history_q_values)
+        analysis.visualize_q_values(history_survived, history_q_values)
     writer.close()
         
 if __name__ == "__main__":

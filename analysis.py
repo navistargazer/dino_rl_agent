@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-def visualize_q_values(history_reward, history_q_values):
+def visualize_q_values(history_survived, history_q_values):
     plt.figure(figsize=(12, 5))
     
     plt.subplot(1, 2, 1)
@@ -11,9 +11,9 @@ def visualize_q_values(history_reward, history_q_values):
     plt.grid(True)
 
     plt.subplot(1, 2, 2)
-    plt.plot(history_reward, color='r', label='Total Rewards')
+    plt.plot(history_survived, color='r', label='Time Survived')
     plt.xlabel('Episode')
-    plt.ylabel('Reward')
+    plt.ylabel('Time')
     plt.legend()
     plt.grid(True)
 
