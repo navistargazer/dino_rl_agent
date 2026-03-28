@@ -1,17 +1,18 @@
-from env.get_state import GetState
-import env.actions as act
+from .get_state import GetState
+from . import actions as act
 import torch
 import time
 import platform
 
+
 class DinoEnvironment:
     def __init__(self):
-        self.is_not_mac = platform.system() != 'Darwin'
+        self.is_not_mac = platform.system() != "Darwin"
         self.get_state = GetState()
         self.state = self.get_state.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
-        self.coord = (self.get_state.monitor['left'], self.get_state.monitor['top'])
+        self.coord = (self.get_state.monitor["left"], self.get_state.monitor["top"])
         act.click(self.coord)
 
     def restart_game(self):
@@ -24,7 +25,7 @@ class DinoEnvironment:
             self.get_state.capture()
 
             if time.time() - start > 2:
-                break               
+                break
         act.release_all()
         self.state = self.get_state.get_next_state(isfirst=True)
         self.reward = 0
@@ -48,7 +49,7 @@ class DinoEnvironment:
         # action = 2(숙이기)라면 짧은 시간 기다림
         else:
             act.down()
-        
+
         # chrome 렌더링 대기 시간
         if self.is_not_mac:
             time.sleep(0.02)
@@ -68,4 +69,3 @@ class DinoEnvironment:
             else:
                 self.reward = 0.05
         return self.state, self.reward, self.done
-    

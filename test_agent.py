@@ -9,8 +9,7 @@ import numpy as np
 import csv
 import os
 import config as cf
-from env.dqn_cnn import DQN_CNN
-from env.dino_env import DinoEnvironment
+from environments import DQN_CNN, DinoEnvironment
 
 
 def test_agent():
@@ -29,8 +28,9 @@ def test_agent():
     frame_time = 1.0 / cf.FPS
 
     # 2. 학습된 베스트 모델 로드
-    model_name = f"DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer"
-    model_path = f"models/best_model_{model_name}.pth"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    model_name = f"DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer.pth"
+    model_path = os.path.join(BASE_DIR, model_name)
 
     print(f"\n[INFO] {model_path} 로드 시도...")
 
