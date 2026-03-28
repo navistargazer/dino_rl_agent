@@ -15,9 +15,9 @@ def train_buffer(model, target_model, optimizer, batch, device):
     # 텐서가 아닌 리스트는 tensor로 변환
     # actions_tensor = torch.tensor(actions, dtype=torch.int64).unsqueeze(1).to(device)
     # 텐서로 변환하는 것보다는 numpy 배열로 만든 후 텐서로 참조만 하는 제로카피가 더 빠름
-    actions_tensor = torch.tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device)   # 나중에 q밸류 인덱싱을 위해 int64로
-    rewards_tensor = torch.tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device) 
-    dones_tensor = torch.tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device)     # 벨만방정식 연산을 위해 float32로
+    actions_tensor = torch.as_tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device)   # 나중에 q밸류 인덱싱을 위해 int64로
+    rewards_tensor = torch.as_tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device) 
+    dones_tensor = torch.as_tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device)     # 벨만방정식 연산을 위해 float32로
 
     # 2. 훈련 로직(feat. 벨만 방정식)
     '''
