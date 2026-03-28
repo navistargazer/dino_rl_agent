@@ -172,7 +172,7 @@ def train_agent():
         if episode > 0 and episode % 100 == 0:
             for param_group in optimizer.param_groups:
                 param_group['lr'] *= 0.95
-            print(f'학습률 감소 : {param_group[0]["lr"]:.7f}')
+            print(f'학습률 감소 : {param_groups[0]["lr"]:.7f}')
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
