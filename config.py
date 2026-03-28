@@ -1,4 +1,4 @@
-DQN_VER = 2
+DQN_VER = 3
 EDGE_DETECT = 1
 PIXEL = 64
 NUM_EPISODES = 1000  # 총 플레이할 게임 판 수

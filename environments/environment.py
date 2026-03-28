@@ -5,7 +5,7 @@ import time
 import platform
 
 
-class DinoEnvironment:
+class Environment:
     def __init__(self, model):
         self.model = model
         self.device = next(model.parameters()).device

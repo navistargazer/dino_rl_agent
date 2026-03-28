@@ -3,9 +3,9 @@ import torch.nn.functional as F
 import config as cf
 
 
-class DQN_CNN(nn.Module):
+class DQN(nn.Module):
     def __init__(self, input_channels=4, num_actions=3, input_pixel=64):
-        super(DQN_CNN, self).__init__()
+        super(DQN, self).__init__()
         # 합성곱 계층, 입력:(1, 4, 64, 64)
         self.conv1 = nn.Conv2d(
             input_channels, 32, kernel_size=7, stride=4, padding=2

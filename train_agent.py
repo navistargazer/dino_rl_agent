@@ -10,10 +10,10 @@ import torch
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import config as cf
-from environments import DQN_CNN, DinoEnvironment
+from environments import DQN, D3QN, Environment
 from trainer import train_buffer, ReplayBuffer
 import os
-import utils.visualize as visualize
+from utils import draw_plots
 
 
 def train_agent():
@@ -39,20 +39,22 @@ def train_agent():
     # torch.set_num_threads(1)
 
     # online model
-    model = DQN_CNN(num_actions=3, input_pixel=cf.PIXEL).to(device)  # 학습자의 두뇌
+    CNN = DQN if _DQN_VER < 3 else D3QN
+    model = CNN(num_actions=3, input_pixel=cf.PIXEL).to(device)  # 학습자의 두뇌
     # target model
-    target_model = DQN_CNN(num_actions=3, input_pixel=cf.PIXEL).to(
-        device
-    )  # 목표 신경망
-    env = DinoEnvironment(model)  # 키보드 제어, 보상 판단을 통제할 객체
-
+    target_model = CNN(num_actions=3, input_pixel=cf.PIXEL).to(device)  # 목표 신경망
     optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
 
+    env = Environment(model)  # 키보드 제어, 보상 판단을 통제할 객체
+
     writer = SummaryWriter("runs/dino_ex_1")  # run/dino_ex_1 폴더에 로그가 쌓임
+    
     frame_time = 1.0 / _FPS
+    
     replaybuffer = ReplayBuffer(
         priority_cap=cf.P_BUFFER_SIZE, normal_cap=cf.N_BUFFER_SIZE, priority_ratio=0.5
     )  # 경험을 저장할 커다란 메모리 공간
+    
     best_score = 0
     epsilon = 1.0
 
@@ -99,7 +101,6 @@ def train_agent():
     _push = replaybuffer.push
     _sample = replaybuffer.sample
     _add_scalar = writer.add_scalar
-    _draw_plots = visualize.draw_plots
 
     # 게임 에피소드 반복 시작
     for episode in range(_NUM_EPISODES):
@@ -199,7 +200,7 @@ def train_agent():
         history_q_values.append(first_q)
         history_survived.append(survival_time)
         # if episode % 10 == 0:
-        _draw_plots(history_survived, history_q_values)
+        draw_plots(history_survived, history_q_values)
 
     # 훈련 종료
     writer.close()

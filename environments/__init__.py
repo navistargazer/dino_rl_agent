@@ -1,3 +1,3 @@
-from .dqn_cnn import DQN_CNN
-from .dino_env import DinoEnvironment
-from . import actions
+from .dqn import DQN
+from .d3qn import D3QN
+from .environment import Environment
