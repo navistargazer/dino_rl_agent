@@ -1,6 +1,7 @@
-matplotlib==3.10.8
-mss==10.1.0
-numpy==2.4.3
-pyautogui==0.9.54
-torch==2.11.0
+matplotlib
+mss
+numpy
+pyautogui
+torch
 opencv-python
+tensorboard
