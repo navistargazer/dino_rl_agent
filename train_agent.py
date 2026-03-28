@@ -18,6 +18,14 @@ import utils.visualize as visualize
 
 def train_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
+    _NUM_EPISODES = cf.NUM_EPISODES
+    _BATCH_SIZE = cf.BATCH_SIZE
+    _UPDATE_FREQ = cf.UPDATE_FREQ
+    _DQN_VER = cf.DQN_VER
+    _NUM_BUFFER = cf.NUM_BUFFER
+    _FPS = cf.FPS
+    _TAU = cf.TAU
+
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif torch.backends.mps.is_available():  # ⭐️ M1/M2 맥을 위한 가속 장치!
@@ -41,7 +49,7 @@ def train_agent():
     optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
 
     writer = SummaryWriter("runs/dino_ex_1")  # run/dino_ex_1 폴더에 로그가 쌓임
-    frame_time = 1.0 / cf.FPS
+    frame_time = 1.0 / _FPS
     replaybuffer = ReplayBuffer(
         priority_cap=cf.P_BUFFER_SIZE, normal_cap=cf.N_BUFFER_SIZE, priority_ratio=0.5
     )  # 경험을 저장할 커다란 메모리 공간
@@ -53,7 +61,7 @@ def train_agent():
 
     # 학습 이어하기(모델 저장 파일 로드)
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    model_name = f"best_model_DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer"
+    model_name = f"best_model_DQN{_DQN_VER}_{_NUM_BUFFER}Buffer"
     model_path = os.path.join(BASE_DIR, f"models/{model_name}.pth")
     print(f"{model_name} 모델 사용", end=" ")
     if os.path.exists(model_path):
@@ -69,7 +77,7 @@ def train_agent():
         epsilon = 1.0
         print("새로운 학습 시작")
     # dqn 버전이 올라가면 타겟 모델 등장
-    if cf.DQN_VER > 0:
+    if _DQN_VER > 0:
         # 타겟 모델에 모델의 상태 저장
         target_model.load_state_dict(model.state_dict())
         # 타겟 모델은 학습 없이 평가모드로
@@ -80,12 +88,6 @@ def train_agent():
     history_survived = []
 
     # while루프 내 라이브러러 캐싱
-    _NUM_EPISODES = cf.NUM_EPISODES
-    _BATCH_SIZE = cf.BATCH_SIZE
-    _UPDATE_FREQ = cf.UPDATE_FREQ
-    _DQN_VER = cf.DQN_VER
-    _NUM_BUFFER = cf.NUM_BUFFER
-
     _get_q_values = env.get_q_values
     _restart_game = env.restart_game
     _step = env.step
@@ -115,7 +117,7 @@ def train_agent():
         # 단일 에피소드 시작
         while not done:
             start = _time()
-            frame_since_update += 1
+            # frame_since_update += 1
             if epi_frame_cnt % 10 == 0:
                 print("#", end="", flush=True)
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
@@ -138,8 +140,16 @@ def train_agent():
 
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
             if len(replaybuffer) > _BATCH_SIZE:
-                batch = _sample(_BATCH_SIZE, _NUM_BUFFER)
-                train_buffer(model, target_model, optimizer, batch, device, _NUM_BUFFER)
+                epi_progress = episode / _NUM_EPISODES
+                batch = _sample(_BATCH_SIZE, _NUM_BUFFER, epi_progress)
+                train_buffer(model, target_model, optimizer, batch, device, _DQN_VER)
+                # 매 스텝마다 타겟 네트워크를 소프트 업데이트
+                for target_param, online_param in zip(
+                    target_model.parameters(), model.parameters()
+                ):
+                    target_param.data.copy_(
+                        _TAU * online_param.data + (1.0 - _TAU) * target_param.data
+                    )
 
             # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = _time() - start
@@ -153,15 +163,15 @@ def train_agent():
             reward_sum += reward
 
         # 에피소드 종료
-        episode_since_update += 1
-        # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트
-        if frame_since_update > _UPDATE_FREQ and episode_since_update >= 3:
-            target_model.load_state_dict(model.state_dict())
-            print(
-                f"타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
-            )
-            frame_since_update = 0
-            episode_since_update = 0
+        # episode_since_update += 1
+        # # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트
+        # if frame_since_update > _UPDATE_FREQ and episode_since_update >= 3:
+        #     target_model.load_state_dict(model.state_dict())
+        #     print(
+        #         f"타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
+        #     )
+        #     frame_since_update = 0
+        #     episode_since_update = 0
         # 생존시간
         survival_time = _time() - epi_start_time
 

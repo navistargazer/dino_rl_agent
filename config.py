@@ -1,12 +1,12 @@
 DQN_VER = 2
 EDGE_DETECT = 1
 PIXEL = 64
-NUM_EPISODES = 1500 # 총 플레이할 게임 판 수
-BATCH_SIZE = 32     # 한 번 학습할 때 꺼내볼 과거 경험의 개수
-NUM_BUFFER = 1
+NUM_EPISODES = 1000  # 총 플레이할 게임 판 수
+BATCH_SIZE = 32  # 한 번 학습할 때 꺼내볼 과거 경험의 개수
+NUM_BUFFER = 2
 P_BUFFER_SIZE = 10000
 N_BUFFER_SIZE = 40000
-FPS = 10 # 프레임 간격
+FPS = 15  # 프레임 간격
 EPSILON_MIN = 0.05
 EPSILON_DECAY = 0.995
 UPDATE_FREQ = 1000

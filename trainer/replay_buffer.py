@@ -1,12 +1,14 @@
 from collections import deque
 import random
 
+
 class ReplayBuffer:
     def __init__(self, priority_cap=2000, normal_cap=8000, priority_ratio=0.5):
-        self.p_ratio = priority_ratio    # 의미있는 기억을 뽑아내는 비율(0:완전랜덤, 1:극단적인 것만)
+        self.p_ratio = (
+            priority_ratio  # 의미있는 기억을 뽑아내는 비율(0:완전랜덤, 1:극단적인 것만)
+        )
         self.p_buffer = deque(maxlen=priority_cap)
         self.n_buffer = deque(maxlen=normal_cap)
-
 
     # 버퍼 메모리에 tuple 저장
     def push(self, memory, num_buffer):
@@ -23,9 +25,10 @@ class ReplayBuffer:
             self.n_buffer.append(memory)
 
     # batch 수 만큼 랜덤 샘플링
-    def sample(self, batch_size, num_buffer):
+    def sample(self, batch_size, num_buffer, epi_progress):
         # 우선도 버퍼에서 뽑을 샘플 숫자
-        p_size = int(batch_size * self.p_ratio) if num_buffer == 2 else 0
+        p_ratio = max(0.1, self.p_ratio * (1 - epi_progress))
+        p_size = int(batch_size * p_ratio) if num_buffer == 2 else 0
         n_size = batch_size - p_size
 
         # 우선도 버퍼에서 뽑을 숫자가 모자라는 경우
@@ -36,7 +39,7 @@ class ReplayBuffer:
         p_samples = random.sample(self.p_buffer, p_size)
         n_samples = random.sample(self.n_buffer, n_size)
         return p_samples + n_samples
-    
+
     # 현재 버퍼에 쌓인 수 리턴 len(replaybuffer) 의 값
     def __len__(self):
         return len(self.p_buffer) + len(self.n_buffer)
