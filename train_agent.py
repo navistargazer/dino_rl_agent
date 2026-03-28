@@ -53,10 +53,9 @@ def train_agent():
 
     # 학습 이어하기(모델 저장 파일 로드)
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(
-        BASE_DIR, f"best_model_DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer.pth"
-    )
-    print(f"DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer 모델 사용", end=" ")
+    model_name = f"best_model_DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer"
+    model_path = os.path.join(BASE_DIR, f"models/{model_name}.pth")
+    print(f"{model_name} 모델 사용", end=" ")
     if os.path.exists(model_path):
         checkpoint = torch.load(model_path)
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -179,7 +178,7 @@ def train_agent():
                 checkpoint,
                 os.path.join(
                     BASE_DIR,
-                    f"models/best_model_DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer.pth",
+                    f"models/{model_name}.pth",
                 ),
             )
             print("\nBest model saved!")
