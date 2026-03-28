@@ -14,7 +14,7 @@ class ReplayBuffer:
     def push(self, memory):
         # memory = (state, action, reward, next_state, done)
         # 단일버퍼이면
-        if cf.DUAL_BUFFER == 0:
+        if cf.NUM_BUFFER == 1:
             self.n_buffer.append(memory)
             return
         # 사망했거나, 점프/숙이기 동작을 한 것은 우선도 높은 기억
@@ -27,7 +27,7 @@ class ReplayBuffer:
     # batch 수 만큼 랜덤 샘플링
     def sample(self, batch_size):
         # 우선도 버퍼에서 뽑을 샘플 숫자
-        p_size = int(batch_size * self.p_ratio) if cf.DUAL_BUFFER == 1 else 0
+        p_size = int(batch_size * self.p_ratio) if cf.NUM_BUFFER == 2 else 0
         n_size = batch_size - p_size
 
         # 우선도 버퍼에서 뽑을 숫자가 모자라는 경우
@@ -37,7 +37,6 @@ class ReplayBuffer:
         # 각 버퍼에서 랜덤 추출 후 합치기
         p_samples = random.sample(self.p_buffer, p_size)
         n_samples = random.sample(self.n_buffer, n_size)
-
         return p_samples + n_samples
     
     # 현재 버퍼에 쌓인 수 리턴 len(replaybuffer) 의 값

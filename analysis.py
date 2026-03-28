@@ -4,7 +4,7 @@ def visualize_q_values(history_survived, history_q_values):
     plt.figure(figsize=(12, 5))
     
     plt.subplot(1, 2, 1)
-    plt.plot(history_q_values, color='b', label='Average Q-Values')
+    plt.plot(history_q_values, color='b', label='Max Q-Values')
     plt.xlabel('Episode')
     plt.ylabel('Q-Value')
     plt.legend()
