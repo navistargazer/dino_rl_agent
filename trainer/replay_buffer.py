@@ -27,17 +27,22 @@ class ReplayBuffer:
     # batch 수 만큼 랜덤 샘플링
     def sample(self, batch_size, num_buffer, epi_progress):
         # 우선도 버퍼에서 뽑을 샘플 숫자
-        p_ratio = max(0.1, self.p_ratio * (1 - epi_progress))
+        min_ratio = 0.2  # 최저 비율
+        # 에피소드가 진행될수록 우선도 버퍼 비율을 p_ratio에서 min_ratio로 감소
+        p_ratio = self.p_ratio - (self.p_ratio - min_ratio) * epi_progress
+        # 버퍼 수에 따라 p_buffer 사이즈 결정
         p_size = int(batch_size * p_ratio) if num_buffer == 2 else 0
         n_size = batch_size - p_size
 
         # 우선도 버퍼에서 뽑을 숫자가 모자라는 경우
-        p_size = min(p_size, len(self.p_buffer))
-        n_size = min(n_size, len(self.n_buffer))
+        actual_p_size = min(p_size, len(self.p_buffer))  # 실제 우선도 버퍼 개수
+        shortfall = p_size - actual_p_size  # 우선도 버퍼에서 못뽑은 개수
+        n_size += shortfall  # 못뽑은 만큼 노멀버퍼에서 보충
+        actual_n_size = min(n_size, len(self.n_buffer))
 
         # 각 버퍼에서 랜덤 추출 후 합치기
-        p_samples = random.sample(self.p_buffer, p_size)
-        n_samples = random.sample(self.n_buffer, n_size)
+        p_samples = random.sample(self.p_buffer, actual_p_size)
+        n_samples = random.sample(self.n_buffer, actual_n_size)
         return p_samples + n_samples
 
     # 현재 버퍼에 쌓인 수 리턴 len(replaybuffer) 의 값

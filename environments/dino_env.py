@@ -6,7 +6,9 @@ import platform
 
 
 class DinoEnvironment:
-    def __init__(self):
+    def __init__(self, model):
+        self.model = model
+        self.device = next(model.parameters()).device
         self.is_not_mac = platform.system() != "Darwin"
         self.get_state = GetState()
         self.state = self.get_state.get_next_state(isfirst=True)
@@ -32,11 +34,10 @@ class DinoEnvironment:
         self.done = False
         return self.state, self.done
 
-    def get_q_values(self, model):
+    def get_q_values(self):
         with torch.no_grad():
-            device = next(model.parameters()).device
-            state_dev = self.state.to(device)
-            q_values = model(state_dev)
+            state_dev = self.state.to(self.device)
+            q_values = self.model(state_dev)
             return q_values
 
     def step(self, action):

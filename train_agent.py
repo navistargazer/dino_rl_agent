@@ -20,11 +20,11 @@ def train_agent():
     # 1. 초기화 (환경, 모델, 메모리 준비)
     _NUM_EPISODES = cf.NUM_EPISODES
     _BATCH_SIZE = cf.BATCH_SIZE
-    _UPDATE_FREQ = cf.UPDATE_FREQ
     _DQN_VER = cf.DQN_VER
     _NUM_BUFFER = cf.NUM_BUFFER
     _FPS = cf.FPS
     _TAU = cf.TAU
+    _GAMMA = cf.GAMMA
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -38,13 +38,13 @@ def train_agent():
     # # 강화학습에서는 pytorch의 과도한 멀티스레드에 의한 cpu오버헤드 방지
     # torch.set_num_threads(1)
 
-    env = DinoEnvironment()  # 키보드 제어, 보상 판단을 통제할 객체
     # online model
     model = DQN_CNN(num_actions=3, input_pixel=cf.PIXEL).to(device)  # 학습자의 두뇌
     # target model
     target_model = DQN_CNN(num_actions=3, input_pixel=cf.PIXEL).to(
         device
     )  # 목표 신경망
+    env = DinoEnvironment(model)  # 키보드 제어, 보상 판단을 통제할 객체
 
     optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
 
@@ -55,9 +55,6 @@ def train_agent():
     )  # 경험을 저장할 커다란 메모리 공간
     best_score = 0
     epsilon = 1.0
-    # 타겟 모델 업데이트 변수(1000프레임 이상, 3에피소드 이상)
-    frame_since_update = 0
-    episode_since_update = 0
 
     # 학습 이어하기(모델 저장 파일 로드)
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -121,7 +118,7 @@ def train_agent():
             if epi_frame_cnt % 10 == 0:
                 print("#", end="", flush=True)
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
-            q_values = _get_q_values(model)
+            q_values = _get_q_values()
             max_q = _max(q_values).item()
             # 에피소드 시작 시 최대 Q값을 시각화
             if epi_frame_cnt == 1:
@@ -142,7 +139,9 @@ def train_agent():
             if len(replaybuffer) > _BATCH_SIZE:
                 epi_progress = episode / _NUM_EPISODES
                 batch = _sample(_BATCH_SIZE, _NUM_BUFFER, epi_progress)
-                train_buffer(model, target_model, optimizer, batch, device, _DQN_VER)
+                train_buffer(
+                    model, target_model, optimizer, batch, device, _DQN_VER, _GAMMA
+                )
                 # 매 스텝마다 타겟 네트워크를 소프트 업데이트
                 for target_param, online_param in zip(
                     target_model.parameters(), model.parameters()
@@ -162,42 +161,27 @@ def train_agent():
             state = next_state
             reward_sum += reward
 
-        # 에피소드 종료
-        # episode_since_update += 1
-        # # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트
-        # if frame_since_update > _UPDATE_FREQ and episode_since_update >= 3:
-        #     target_model.load_state_dict(model.state_dict())
-        #     print(
-        #         f"타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
-        #     )
-        #     frame_since_update = 0
-        #     episode_since_update = 0
-        # 생존시간
+        # 에피소드 종료 생존시간
         survival_time = _time() - epi_start_time
 
         # 베스트 모델 저장
-        if (episode > _NUM_EPISODES - 100) and survival_time > best_score:
+        if (episode > 200) and survival_time > best_score:
             best_score = survival_time
             checkpoint = {
                 "model_state_dict": model.state_dict(),
                 "best_score": best_score,
                 "epsilon": epsilon,
             }
-            os.makedirs("models", exist_ok=True)
-            torch.save(
-                checkpoint,
-                os.path.join(
-                    BASE_DIR,
-                    f"models/{model_name}.pth",
-                ),
-            )
+            save_dir = os.path.join(BASE_DIR, "models")
+            os.makedirs(save_dir, exist_ok=True)
+            torch.save(checkpoint, os.path.join(save_dir, f"{model_name}.pth"))
             print("\nBest model saved!")
         else:
             print()
 
         if episode > 0 and episode % 100 == 0:
             for param_group in optimizer.param_groups:
-                param_group["lr"] *= 0.95
+                param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
             print(f"학습률 감소 : {optimizer.param_groups[0]['lr']:.7f}")
 
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
@@ -216,6 +200,8 @@ def train_agent():
         history_survived.append(survival_time)
         # if episode % 10 == 0:
         _draw_plots(history_survived, history_q_values)
+
+    # 훈련 종료
     writer.close()
 
 

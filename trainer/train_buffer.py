@@ -2,34 +2,41 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-def train_buffer(model, target_model, optimizer, batch, device, dqn_ver):
+
+def train_buffer(model, target_model, optimizer, batch, device, dqn_ver, gamma=0.99):
     # 1. 데이터 전처리 파트
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)
 
     # tensor인 states 들은 cat(합침)
-    states_tensor = torch.cat(states, dim=0).to(device)             # (32, 4, 84, 84)
-    next_states_tensor = torch.cat(next_states, dim=0).to(device)    # (32, 4, 84, 84)
+    states_tensor = torch.cat(states, dim=0).to(device)  # (32, 4, 84, 84)
+    next_states_tensor = torch.cat(next_states, dim=0).to(device)  # (32, 4, 84, 84)
 
     # 텐서가 아닌 리스트는 tensor로 변환
     # actions_tensor = torch.tensor(actions, dtype=torch.int64).unsqueeze(1).to(device)
     # 텐서로 변환하는 것보다는 numpy 배열로 만든 후 텐서로 참조만 하는 제로카피가 더 빠름
-    actions_tensor = torch.as_tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device)   # 나중에 q밸류 인덱싱을 위해 int64로
-    rewards_tensor = torch.as_tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device) 
-    dones_tensor = torch.as_tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device)     # 벨만방정식 연산을 위해 float32로
+    actions_tensor = (
+        torch.as_tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device)
+    )  # 나중에 q밸류 인덱싱을 위해 int64로
+    rewards_tensor = (
+        torch.as_tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device)
+    )
+    dones_tensor = (
+        torch.as_tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device)
+    )  # 벨만방정식 연산을 위해 float32로
 
     # 2. 훈련 로직(feat. 벨만 방정식)
-    '''
+    """
     Target = R + r * maxQ(s', a') or R if done
     정답지 = 현재행동의보상 + 할인율 * 최대미래가치(최선의 행동을 했을 때)
     다음 상태에서 사망이면 미래가치는 0
     즉 최대수령가능 보상을 정답지로 두고, 현재 얻은 q값과의 오차를 최대한 줄이는 방향으로 역전파
-    '''
+    """
     # 현재 상태의 q밸류 쌍 확인
-    q_values = model(states_tensor)                          # (32, 2)
+    q_values = model(states_tensor)  # (32, 2)
     # 그중에 실제로 수행한 action들의 q밸류(gaher로 행동별 인덱스의 q값만 추출)
     acted_q = q_values.gather(dim=1, index=actions_tensor)  # (32, 1)
-    avg_q = acted_q.mean().item()
+    # avg_q = acted_q.mean().item()
 
     # 미래에 획득할 가치(수치확인만이 목적이므로 가중치 수정이 안되도록 기울기 추적을 끊는다)
     with torch.no_grad():
@@ -40,7 +47,7 @@ def train_buffer(model, target_model, optimizer, batch, device, dqn_ver):
         # 1. nature dqn : target이 다음상태의 가치를 계산 -> 고정된 과녁이나, 타겟이 과대평가할 가능성 존재
         elif dqn_ver == 1:
             # 미래 가치들 확인
-            next_q_values = target_model(next_states_tensor)           # (32, 2)
+            next_q_values = target_model(next_states_tensor)  # (32, 2)
             # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
             max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
         # 2. double dqn : 현행 모델이 최선행동을 고르면 타겟모델이 그 가치를 평가 -> 과대평가 가능성 차단
@@ -53,10 +60,10 @@ def train_buffer(model, target_model, optimizer, batch, device, dqn_ver):
             target_next_q = target_model(next_states_tensor)
             # 타겟 모델이 현행모델의 최선행동을 평가함
             max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
-            
+
         # 벨만방정식의 정답지 공식(사망시 미래가치는 증발하는 것을 (1-dones)로 구현)
-        target_q = rewards_tensor + 0.99 * max_next_q_values * (1 - dones_tensor)
-    
+        target_q = rewards_tensor + gamma * max_next_q_values * (1 - dones_tensor)
+
     # 3. 역전파
     # 손실함수
     loss = F.smooth_l1_loss(acted_q, target_q)
@@ -64,9 +71,7 @@ def train_buffer(model, target_model, optimizer, batch, device, dqn_ver):
     optimizer.zero_grad()
     # 역전파
     loss.backward()
+    # 기울기 폭발 방지
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     # 가중치 업데이트
     optimizer.step()
-
-
-
-
