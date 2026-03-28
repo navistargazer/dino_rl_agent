@@ -1,9 +1,8 @@
 import torch
 import torch.nn.functional as F
-import config as cf
 import numpy as np
 
-def train_buffer(model, target_model, optimizer, batch, device):
+def train_buffer(model, target_model, optimizer, batch, device, dqn_ver):
     # 1. 데이터 전처리 파트
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)
@@ -35,11 +34,11 @@ def train_buffer(model, target_model, optimizer, batch, device):
     # 미래에 획득할 가치(수치확인만이 목적이므로 가중치 수정이 안되도록 기울기 추적을 끊는다)
     with torch.no_grad():
         # 0. 초기 dqn : 현행 모델이 다음상태를 계산하고 최대가치를 직접 계산 -> 가중치 변경 때문에 목표가 끊임없이 움직이는 문제
-        if cf.DQN_VER == 0:
+        if dqn_ver == 0:
             next_q_values = model(next_states_tensor)
             max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
         # 1. nature dqn : target이 다음상태의 가치를 계산 -> 고정된 과녁이나, 타겟이 과대평가할 가능성 존재
-        elif cf.DQN_VER == 1:
+        elif dqn_ver == 1:
             # 미래 가치들 확인
             next_q_values = target_model(next_states_tensor)           # (32, 2)
             # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
@@ -56,7 +55,7 @@ def train_buffer(model, target_model, optimizer, batch, device):
             max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
             
         # 벨만방정식의 정답지 공식(사망시 미래가치는 증발하는 것을 (1-dones)로 구현)
-        target_q = rewards_tensor + cf.GAMMA * max_next_q_values * (1 - dones_tensor)
+        target_q = rewards_tensor + 0.99 * max_next_q_values * (1 - dones_tensor)
     
     # 3. 역전파
     # 손실함수

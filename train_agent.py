@@ -9,12 +9,12 @@ import torch
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import config as cf
-from dqn_cnn import DQN_CNN
-from dino_env import DinoEnvironment
-from replay_buffer import ReplayBuffer
-from train_buffer import train_buffer
+from env.dqn_cnn import DQN_CNN
+from env.dino_env import DinoEnvironment
+from trainer.train_buffer import train_buffer
+from trainer.replay_buffer import ReplayBuffer
 import os
-import analysis
+import utils.visualize as visualize
 
 
 def train_agent():
@@ -33,9 +33,9 @@ def train_agent():
 
     env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
     # online model
-    model = DQN_CNN(num_actions=3).to(device)        # 학습자의 두뇌
+    model = DQN_CNN(num_actions=3, input_pixel=cf.PIXEL).to(device)        # 학습자의 두뇌
     #target model
-    target_model = DQN_CNN(num_actions=3).to(device) # 목표 신경망
+    target_model = DQN_CNN(num_actions=3, input_pixel=cf.PIXEL).to(device) # 목표 신경망
 
     optimizer = optim.Adam(model.parameters(), lr=cf.LEARNING_RATE)
 
@@ -74,9 +74,10 @@ def train_agent():
 
     # while루프 내 라이브러러 캐싱
     _NUM_EPISODES = cf.NUM_EPISODES
-    _FPS = cf.FPS
     _BATCH_SIZE = cf.BATCH_SIZE
     _UPDATE_FREQ = cf.UPDATE_FREQ
+    _DQN_VER = cf.DQN_VER
+    _NUM_BUFFER = cf.NUM_BUFFER
 
     _get_q_values = env.get_q_values
     _restart_game = env.restart_game
@@ -92,7 +93,7 @@ def train_agent():
     _push = replaybuffer.push
     _sample = replaybuffer.sample
     _add_scalar = writer.add_scalar
-    _visualize = analysis.visualize_q_values
+    _draw_plots = visualize.draw_plots
 
     # 게임 에피소드 반복 시작
     for episode in range(_NUM_EPISODES):
@@ -109,7 +110,7 @@ def train_agent():
             start = _time()
             frame_since_update += 1
             if epi_frame_cnt % 10 == 0:
-                print('#', end='')
+                print('#', end='', flush=True)
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
             q_values = _get_q_values(model)
             max_q = _max(q_values).item()
@@ -126,12 +127,12 @@ def train_agent():
             next_state, reward, done = _step(action)
             
             # 3. 경험 저장 (방금 겪은 일을 메모리에 기록)
-            _push((state, action, reward, next_state, done))
+            _push((state, action, reward, next_state, done), _NUM_BUFFER)
 
             # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
             if len(replaybuffer) > _BATCH_SIZE:
-                batch = _sample(_BATCH_SIZE)
-                train_buffer(model, target_model, optimizer, batch, device)
+                batch = _sample(_BATCH_SIZE, _NUM_BUFFER)
+                train_buffer(model, target_model, optimizer, batch, device, _NUM_BUFFER)
 
             # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
             interval = _time() - start
@@ -187,7 +188,7 @@ def train_agent():
         history_q_values.append(first_q)
         history_survived.append(survival_time)
         # if episode % 10 == 0:
-        _visualize(history_survived, history_q_values)
+        _draw_plots(history_survived, history_q_values)
     writer.close()
         
 if __name__ == "__main__":
