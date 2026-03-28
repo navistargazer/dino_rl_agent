@@ -58,41 +58,42 @@ def test_agent():
 
     print(f"🚀 [{model_name}] 실전 성능 테스트 {_TEST_EPISODES}회 가동을 시작합니다!")
 
-    for episode in range(_TEST_EPISODES):
-        state, done = _restart_game()
+    with torch.no_grad():
+        for episode in range(_TEST_EPISODES):
+            state, done = _restart_game()
 
-        epi_start_time = _time()
-        epi_frame_cnt = 1
-        reward_sum = 0.0
+            epi_start_time = _time()
+            epi_frame_cnt = 1
+            reward_sum = 0.0
 
-        while not done:
-            start = _time()
+            while not done:
+                start = _time()
 
-            # 테스트 중에는 진행 상황만 간단히 출력 (로그 화면 도배 방지)
-            if epi_frame_cnt % 30 == 0:
-                print(".", end="", flush=True)
+                # 테스트 중에는 진행 상황만 간단히 출력 (로그 화면 도배 방지)
+                if epi_frame_cnt % 30 == 0:
+                    print(".", end="", flush=True)
 
-            q_values = _get_q_values(model)
-            action = _argmax(q_values).item()
+                q_values = _get_q_values(model)
+                action = _argmax(q_values).item()
 
-            epi_frame_cnt += 1
-            next_state, reward, done = _step(action)
+                epi_frame_cnt += 1
+                next_state, reward, done = _step(action)
 
-            interval = _time() - start
-            if interval < frame_time:
-                _sleep(frame_time - interval)
+                interval = _time() - start
+                if interval < frame_time:
+                    _sleep(frame_time - interval)
 
-            state = next_state
-            reward_sum += reward
+                state = next_state
+                reward_sum += reward
 
-        # ⭐️ 에피소드 종료 후 기록 저장
-        survival_time = _time() - epi_start_time
-        survival_records.append(survival_time)
-        reward_records.append(reward_sum)
+            # ⭐️ 에피소드 종료 후 기록 저장
+            survival_time = _time() - epi_start_time
+            survival_records.append(survival_time)
+            reward_records.append(reward_sum)
 
-        print(
-            f" [Ep {episode + 1:02d}] 생존: {survival_time:.2f}초 | 보상: {reward_sum:.2f}"
-        )
+            print(
+                f" [Ep {episode + 1:02d}] 생존: {survival_time:.2f}초 | 보상: {reward_sum:.2f}"
+            )
 
     # ⭐️ 4. 실험 결과 통계 출력 및 CSV 저장
     avg_survival = np.mean(survival_records)
