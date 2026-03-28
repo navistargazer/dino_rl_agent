@@ -26,6 +26,11 @@ def train_agent():
         print("Mac GPU (MPS) 가동!")
     else:
         device = torch.device("cpu")
+        print("CPU 가동!")
+
+    # # 강화학습에서는 pytorch의 과도한 멀티스레드에 의한 cpu오버헤드 방지
+    # torch.set_num_threads(1)
+
     env = DinoEnvironment()         # 키보드 제어, 보상 판단을 통제할 객체
     # online model
     model = DQN_CNN(num_actions=3).to(device)        # 학습자의 두뇌
@@ -98,15 +103,13 @@ def train_agent():
         epi_frame_cnt = 1
         reward_sum = 0.0
         first_q = 0.0
-        fps = _FPS
 
         # 단일 에피소드 시작
         while not done: 
             start = _time()
             frame_since_update += 1
-            if epi_frame_cnt > fps:
+            if epi_frame_cnt % 10 == 0:
                 print('#', end='')
-                fps += _FPS
             # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
             q_values = _get_q_values(model)
             max_q = _max(q_values).item()
@@ -160,11 +163,16 @@ def train_agent():
                 'best_score': best_score,
                 'epsilon': epsilon,
             }
+            os.makedirs('models', exist_ok=True)
             torch.save(checkpoint, f'models/best_model_DQN{cf.DQN_VER}_{cf.NUM_BUFFER}Buffer.pth')
             print('\nBest model saved!')
         else:
             print()
 
+        if episode > 0 and episode % 100 == 0:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= 0.95
+            print(f'학습률 감소 : {param_group[0]["lr"]:.7f}')
         
         # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
         epsilon = max(cf.EPSILON_MIN, epsilon * cf.EPSILON_DECAY)
