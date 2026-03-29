@@ -1,4 +1,4 @@
-from .get_state import GetState
+from .vision import Vision
 from . import actions as act
 import time
 import platform
@@ -9,26 +9,26 @@ class Environment:
         self.model = model
         self.device = next(model.parameters()).device
         self.is_not_mac = platform.system() != "Darwin"
-        self.get_state = GetState()
-        self.state = self.get_state.get_next_state(isfirst=True)
+        self.vision = Vision()
+        self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
-        self.coord = (self.get_state.monitor["left"], self.get_state.monitor["top"])
-        act.click(self.coord)
+        self.coord = (self.vision.monitor["left"], self.vision.monitor["top"])
 
     def restart_game(self):
         start = time.time()
-        while self.get_state.isgameover:
+        act.click(self.coord)
+        while self.vision.isgameover:
             act.jump()
             act.wait()
             if self.is_not_mac:
                 time.sleep(0.02)
-            self.get_state.capture()
+            self.vision.capture()
 
             if time.time() - start > 2:
                 break
         act.release_all()
-        self.state = self.get_state.get_next_state(isfirst=True)
+        self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
         return self.state, self.done
@@ -57,9 +57,9 @@ class Environment:
             time.sleep(0.02)
 
         # 행동 이후 상태
-        self.state = self.get_state.get_next_state()
+        self.state = self.vision.get_next_state()
         # 사망 판정
-        self.done = self.get_state.isgameover
+        self.done = self.vision.isgameover
         # 보상 설정
         if self.done:
             self.reward = -10

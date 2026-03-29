@@ -45,11 +45,11 @@ class TrainAgent:
         self.target_model = CNN(num_actions=3, input_pixel=cf.PIXEL).to(self.device)  # 목표 신경망
         self.optimizer = optim.Adam(self.model.parameters(), lr=cf.LEARNING_RATE)
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
-        self.env = Environment(self.model)
+        env = Environment(self.model)
         # 환경 함수 캐싱
-        self._get_q_values = self.env.get_q_values
-        self._restart_game = self.env.restart_game
-        self._step = self.env.step
+        self._get_q_values = env.get_q_values
+        self._restart_game = env.restart_game
+        self._step = env.step
         
         self.writer = SummaryWriter("runs/tb_log")  # run/dino_ex_1 폴더에 로그가 쌓임
         
@@ -176,6 +176,8 @@ class TrainAgent:
         _sample = self.replaybuffer.sample
         _add_scalar = self.writer.add_scalar
 
+        half_episode = self.NUM_EPISODES // 2
+
         # 게임 에피소드 반복 시작
         for episode in range(self.NUM_EPISODES):
             state, done = self._restart_game()  # 브라우저 초기화 및 게임 시작
@@ -255,7 +257,7 @@ class TrainAgent:
             survival_time = _time() - epi_start_time
             # 결과 출력
             print(
-                f"Episode: {episode} | Survived: {survival_time:.2f} | Max_Q: {init_max_q:.2f} | Total Reward: {reward_sum:.2f} | Epsilon: {self.epsilon:.2f}"
+                f"\nEpisode {episode:4d} | Survived {survival_time:.3f} | Max_Q {init_max_q:.2f} | Total Reward {reward_sum:.2f} | Epsilon {self.epsilon:.2f}"
             )
 
             # 베스트 모델 저장 & 학습률 소프트 업데이트
@@ -265,7 +267,7 @@ class TrainAgent:
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
                 print(f"학습률 감소 : {self.optimizer.param_groups[0]['lr']:.7f}")
-            elif survival_time > self.best_score * 1.2:
+            elif (episode > half_episode) and (survival_time > self.best_score * 1.2):
                 print("기존 기록 20% 이상 갱신, 모델 검증 중", end="")
                 self.validate_model(num_test=5)
 

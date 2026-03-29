@@ -1,7 +1,5 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import config as cf
-
 
 class DQN(nn.Module):
     def __init__(self, input_channels=4, num_actions=3, input_pixel=64):
