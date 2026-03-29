@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def train_buffer(model, target_model, optimizer, batch, device, dqn_ver, gamma=0.99):
+def train_buffer(model, target_model, optimizer, batch, device, dqn_ver, gamma, push_to_priority):
     # 1. 데이터 전처리 파트
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)
@@ -34,7 +34,7 @@ def train_buffer(model, target_model, optimizer, batch, device, dqn_ver, gamma=0
     """
     # 현재 상태의 q밸류 쌍 확인
     q_values = model(states_tensor)  # (32, 2)
-    # 그중에 실제로 수행한 action들의 q밸류(gaher로 행동별 인덱스의 q값만 추출)
+    # 그중에 실제로 수행한 action들의 q밸류(gather로 행동별 인덱스의 q값만 추출)
     acted_q = q_values.gather(dim=1, index=actions_tensor)  # (32, 1)
     # avg_q = acted_q.mean().item()
 
@@ -75,3 +75,16 @@ def train_buffer(model, target_model, optimizer, batch, device, dqn_ver, gamma=0
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     # 가중치 업데이트
     optimizer.step()
+
+    # 하이브리드 듀얼 버퍼 : TD-error가 큰 기억은 우선도 버퍼에 밀어넣기
+    # 오차의 절대값을 계산->토치 기울기 계산에서 분리->평탄화->cpu 램으로->넘파이배열
+    td_errors = torch.abs(acted_q - target_q).detach().squeeze().cpu().numpy()
+    # 오차 크기 상위 10% 정도를 기준점으로 삼음
+    threshold = np.percentile(td_errors, 90)
+    # 배치의 기억 중 기준이상의 TD-error값을 가진 기억을 우선도 버퍼로
+    for i in range(len(batch)):
+        if td_errors[i] >= threshold:
+            push_to_priority(batch[i])
+
+
+

@@ -23,6 +23,9 @@ class ReplayBuffer:
         # 나머지는 평범한 기억으로
         else:
             self.n_buffer.append(memory)
+    
+    def push_to_priority(self, memory):
+        self.p_buffer.append(memory)
 
     # batch 수 만큼 랜덤 샘플링
     def sample(self, batch_size, num_buffer, epi_progress):

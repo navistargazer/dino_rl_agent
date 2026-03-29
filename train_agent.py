@@ -173,10 +173,9 @@ class TrainAgent:
         _sleep = time.sleep
 
         _push = self.replaybuffer.push
+        _push_to_priority = self.replaybuffer.push_to_priority
         _sample = self.replaybuffer.sample
         _add_scalar = self.writer.add_scalar
-
-        half_episode = self.NUM_EPISODES // 2
 
         # 게임 에피소드 반복 시작
         for episode in range(self.NUM_EPISODES):
@@ -232,7 +231,7 @@ class TrainAgent:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.NUM_BUFFER, epi_progress)
                     train_buffer(
-                        self.model, self.target_model, self.optimizer, batch, self.device, self.DQN_VER, self.GAMMA
+                        self.model, self.target_model, self.optimizer, batch, self.device, self.DQN_VER, self.GAMMA, _push_to_priority
                     )
                     # 매 스텝마다 타겟 네트워크를 소프트 업데이트
                     for target_param, online_param in zip(
@@ -267,7 +266,7 @@ class TrainAgent:
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
                 print(f"학습률 감소 : {self.optimizer.param_groups[0]['lr']:.7f}")
-            elif (episode > half_episode) and (survival_time > self.best_score * 1.2):
+            elif (episode > 500) and (survival_time > self.best_score * 1.2):
                 print("기존 기록 20% 이상 갱신, 모델 검증 중", end="")
                 self.validate_model(num_test=5)
 
