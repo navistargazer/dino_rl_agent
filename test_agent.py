@@ -23,10 +23,10 @@ def test_agent():
         device = torch.device("cpu")
         print("CPU 가동!")
 
-    env = Environment()
     _DQN_VER = cf.DQN_VER
     CNN = DQN if _DQN_VER < 3 else D3QN
     model = CNN(num_actions=3, input_pixel=cf.PIXEL).to(device)
+    env = Environment(model)
     frame_time = 1.0 / cf.FPS
 
     # 2. 학습된 베스트 모델 로드
@@ -75,7 +75,7 @@ def test_agent():
                 if epi_frame_cnt % 30 == 0:
                     print(".", end="", flush=True)
 
-                q_values = _get_q_values(model)
+                q_values = _get_q_values()
                 action = _argmax(q_values).item()
 
                 epi_frame_cnt += 1
