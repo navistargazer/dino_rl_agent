@@ -62,12 +62,7 @@ class Environment:
         self.done = self.vision.isgameover
         # 보상 설정
         if self.done:
-            self.reward = -10
+            self.reward = -100
         else:
-            if action == 0:
-                self.reward = 0.1
-            elif action == 1:
-                self.reward = 0.0
-            else:
-                self.reward = 0.05
+            self.reward = 0.1
         return self.state, self.reward, self.done
