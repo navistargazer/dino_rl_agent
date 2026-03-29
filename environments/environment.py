@@ -1,6 +1,5 @@
 from .get_state import GetState
 from . import actions as act
-import torch
 import time
 import platform
 
@@ -34,11 +33,13 @@ class Environment:
         self.done = False
         return self.state, self.done
 
-    def get_q_values(self):
-        with torch.no_grad():
-            state_dev = self.state.to(self.device)
-            q_values = self.model(state_dev)
-            return q_values
+    def get_q_values(self, return_dueling=False):
+        state_dev = self.state.to(self.device)
+        if return_dueling:
+            q_values, value, advantage = self.model(state_dev, return_dueling)
+            return q_values, value, advantage
+        q_values = self.model(state_dev)
+        return q_values
 
     def step(self, action):
         # action = 0(아무것도 안함)이라면 1프레임 기다림

@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import os
 
-def draw_plots(history_survived, history_q_values):
+def draw_plots(history_survived, history_q_values, plot_path):
     plt.figure(figsize=(12, 5))
     
     plt.subplot(1, 2, 1)
@@ -19,6 +19,5 @@ def draw_plots(history_survived, history_q_values):
     plt.grid(True)
 
     plt.tight_layout()
-    os.makedirs('plots', exist_ok=True)
-    plt.savefig('plots/train_plot.png')
+    plt.savefig(plot_path)
     plt.close()

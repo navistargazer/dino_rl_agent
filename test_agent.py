@@ -109,8 +109,10 @@ def test_agent():
     print("=" * 50)
 
     # 결과를 CSV 파일로 저장 (나중에 박스플롯 그릴 때 사용)
-    os.makedirs("results", exist_ok=True)
-    csv_filename = f"results/test_results_{model_name}.csv"
+    result_dir = os.path.join(BASE_DIR, "results")
+    os.makedirs(result_dir, exist_ok=True)
+    csv_filename = os.path.join(result_dir, f"test_results_{model_name}.csv")
+    # csv_filename = results/test_results_{model_name}.csv"
 
     with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)

@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import config as cf
 
 
 class D3QN(nn.Module):
@@ -44,7 +43,7 @@ class D3QN(nn.Module):
         pixel = (input_size - kernel_size + 2 * padding) / stride + 1
         return int(pixel)
 
-    def forward(self, x):
+    def forward(self, x, return_dueling=False):
         # 합성곱-활성화 3번
         x = F.relu(self.conv1(x))  # (1, 32, 16, 16)
         x = F.relu(self.conv2(x))  # (1, 64, 8, 8)
@@ -64,5 +63,6 @@ class D3QN(nn.Module):
         # 3. dueling 결합
         # Q = V + (A - mean(A))
         q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
-
+        if return_dueling:
+            return q_values, value, advantage
         return q_values
