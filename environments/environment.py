@@ -5,11 +5,11 @@ import platform
 
 
 class Environment:
-    def __init__(self, model, img_process_type=2, pixel=64):
+    def __init__(self, model, img_process_type=2, pixel=64, logging=True):
         self.model = model
         self.device = next(model.parameters()).device
         self.is_not_mac = platform.system() != "Darwin"
-        self.vision = Vision(img_process_type, pixel)
+        self.vision = Vision(img_process_type, pixel, logging=logging)
         self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
