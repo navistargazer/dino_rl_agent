@@ -31,7 +31,9 @@ class Environment:
                 break
         self.action.click((self.vision.monitor["left"], self.vision.monitor["top"] + 200))
         self.action.release_all()
-        self.state = self.vision.get_next_state(isfirst=True)
+        for _ in range(5):
+            self.state = self.vision.get_next_state()
+            time.sleep(0.2)
         self.reward = 0
         return self.state, self.is_game_over
 
