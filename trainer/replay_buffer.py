@@ -10,10 +10,10 @@ class ReplayBuffer:
         self.n_buffer = deque(maxlen=normal_cap)
 
     # 버퍼 메모리에 tuple 저장
-    def push(self, memory, num_buffer):
+    def push(self, memory, buffer_type):
         _, action, *_, done = memory
         # 단일버퍼이면
-        if num_buffer == 1:
+        if buffer_type == 0:
             self.n_buffer.append(memory)
             return
         # 사망했거나, 점프/숙이기 동작을 한 것은 우선도 높은 기억
@@ -27,13 +27,13 @@ class ReplayBuffer:
         self.p_buffer.append(memory)
 
     # batch 수 만큼 랜덤 샘플링
-    def sample(self, batch_size, num_buffer, epi_progress):
+    def sample(self, batch_size, buffer_type, epi_progress):
         # 우선도 버퍼에서 뽑을 샘플 숫자
         min_ratio = 0.2  # 최저 비율
         # 에피소드가 진행될수록 우선도 버퍼 비율을 p_ratio에서 min_ratio로 감소
         p_ratio = self.p_ratio - (self.p_ratio - min_ratio) * epi_progress
         # 버퍼 수에 따라 p_buffer 사이즈 결정
-        p_size = int(batch_size * p_ratio) if num_buffer == 2 else 0
+        p_size = int(batch_size * p_ratio) if buffer_type > 0 else 0
         n_size = batch_size - p_size
 
         # 우선도 버퍼에서 뽑을 숫자가 모자라는 경우

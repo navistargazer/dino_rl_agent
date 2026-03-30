@@ -15,12 +15,12 @@ import os
 from utils import draw_plots
 
 class TrainAgent:
-    def __init__(self, dqn_ver=3, img_process_type=2, buffer_type=3, target_update_type=1, pixel=64, num_episodes=1500, batch_size=32, p_ratio=0.5, p_buffer_size=10000, n_buffer_size=40000, fps=15, epsilon_min=0.05, epsilon_decay=0.995, update_freq=1000, tau=0.005, learning_rate=0.0001, gamma=0.99):
+    def __init__(self, dqn_ver=3, img_process_type=2, buffer_type=2, target_update_type=1, pixel=64, num_episodes=1500, batch_size=32, p_ratio=0.5, p_buffer_size=10000, n_buffer_size=40000, fps=15, epsilon_min=0.05, epsilon_decay=0.995, update_freq=1000, tau=0.005, learning_rate=0.0001, gamma=0.99):
         # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
         self.DQN_VER = dqn_ver
         # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
         self.IMG_PROCESS_TYPE = img_process_type
-        # 기억용 버퍼 타입 (1:단일버퍼, 2:우선도+노멀 듀얼버퍼, 3:하이브리드 듀얼 버퍼)
+        # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
         self.BUFFER_TYPE = buffer_type
         # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
         self.TARGET_UPDATE_TYPE = target_update_type
@@ -157,7 +157,6 @@ class TrainAgent:
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     q_values = self._get_q_values()
                     if epi_frame_cnt == 1:
-                        max_q_saved = True
                         max_q = _max(q_values).item()
                     if epi_frame_cnt % 10 == 0:
                         print("#", end="", flush=True)
@@ -236,7 +235,8 @@ class TrainAgent:
         episode_since_update = 0
         # 게임 에피소드 반복 시작
         for episode in range(self.NUM_EPISODES):
-            state, done = self._restart_game()  # 브라우저 초기화 및 게임 시작
+            # 최초 상태를 가져옴, 브라우저 초기화 및 게임 시작
+            state, done = self._restart_game()
             # time.sleep(1)
             # q-value 시각화 준비
             epi_start_time = _time()
@@ -304,7 +304,7 @@ class TrainAgent:
                 elif interval > self.frame_time + 0.01:
                     print(f"frame delayed: {interval - self.frame_time:.3f}sec")
 
-                # 7. 상태 업데이트 (다음 스텝을 위해)
+                # 7. 다음 상태를 저장(기억 버퍼에 현재 상태로 전달되는 임시 변수 역할)
                 state = next_state
                 reward_sum += reward
 
@@ -353,5 +353,5 @@ class TrainAgent:
 
 
 if __name__ == "__main__":
-    trainer = TrainAgent(dqn_ver=3, img_process_type=2, buffer_type=3, target_update_type=1)
+    trainer = TrainAgent(dqn_ver=3, img_process_type=2, buffer_type=2, target_update_type=1)
     trainer.train_agent()
