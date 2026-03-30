@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def train_buffer(model, target_model, optimizer, batch, device, dqn_ver, gamma, push_to_priority):
+def train_buffer(model, target_model, optimizer, batch, device, push_to_priority, dqn_ver=3, gamma=0.99):
     # 1. 데이터 전처리 파트
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)

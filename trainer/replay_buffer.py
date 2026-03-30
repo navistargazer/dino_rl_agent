@@ -4,9 +4,8 @@ import random
 
 class ReplayBuffer:
     def __init__(self, priority_cap=2000, normal_cap=8000, priority_ratio=0.5):
-        self.p_ratio = (
-            priority_ratio  # 의미있는 기억을 뽑아내는 비율(0:완전랜덤, 1:극단적인 것만)
-        )
+        # 의미있는 기억을 뽑아내는 비율(0:완전랜덤, 1:극단적인 것만)
+        self.p_ratio = priority_ratio  
         self.p_buffer = deque(maxlen=priority_cap)
         self.n_buffer = deque(maxlen=normal_cap)
 

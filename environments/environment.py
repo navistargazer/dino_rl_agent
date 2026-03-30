@@ -5,11 +5,11 @@ import platform
 
 
 class Environment:
-    def __init__(self, model):
+    def __init__(self, model, img_process_type=2, pixel=64):
         self.model = model
         self.device = next(model.parameters()).device
         self.is_not_mac = platform.system() != "Darwin"
-        self.vision = Vision()
+        self.vision = Vision(img_process_type, pixel)
         self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
         self.done = False
@@ -23,7 +23,7 @@ class Environment:
             act.wait()
             if self.is_not_mac:
                 time.sleep(0.02)
-            self.vision.capture()
+            self.vision.grab_monitor()
 
             if time.time() - start > 2:
                 break

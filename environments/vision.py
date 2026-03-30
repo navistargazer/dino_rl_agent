@@ -5,9 +5,11 @@ import mss
 from collections import deque
 import os
 
-
 class Vision:
-    def __init__(self):
+    def __init__(self, img_process_type=2, pixel=64):
+        self.IMG_PROCESS_TYPE = img_process_type
+        self.PIXEL = pixel
+        print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE}, 이미지 크기: {self.PIXEL}x{self.PIXEL}')
         self.sct = mss.mss()
         cur_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(cur_dir, 'template.png')
@@ -106,7 +108,7 @@ class Vision:
         return monitor_settings
 
     # 화면 프레임 캡처 - 게임오버도 판단
-    def capture(self):
+    def grab_monitor(self):
         screen = np.array(self.sct.grab(self.monitor))
         # 수정 1: BGRA -> GRAY로 정확히 변환
         gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY) 
@@ -117,41 +119,44 @@ class Vision:
         gameover = gray[0:3, 200:205].astype(int)
         diff_area = np.abs(gameover - bg_pixel)
         self.isgameover = np.max(diff_area) > 100
-        #==================================================
-        # # 밤/낮 상관없이 윤곽선으로 학습하기 위한 윤곽선 이미지
-        # edge = cv2.Canny(gray, 100, 200)
-        # # 84x84로 리사이즈(이미지 축소 시 윤곽선이 날아가지 않기 위해 면적평균 보간)
-        # resized = cv2.resize(edge, (64, 64), interpolation=cv2.INTER_AREA)
-        # normalized = (resized / 255.0).astype(np.float32)
-        # return normalized
-        #==============================================
-        # 윤곽선 -> 이미지 차이(프레임 차분, difference detection)으로 변경
         return gray
+
+    def get_processed_image(self):
+        curr_frame = self.grab_monitor()
+        # 이미지 전처리(0:none, 1:canny, 2:diff)
+        if self.IMG_PROCESS_TYPE == 0:
+            # 0: 전처리 없음
+            processed = curr_frame
+        elif self.IMG_PROCESS_TYPE == 1:
+            # 1:윤곽선만 따서 다크모드 대응
+            processed = cv2.Canny(curr_frame, 100, 200)
+        elif self.IMG_PROCESS_TYPE == 2:
+            # 2:이전 프레임과 차이가 있는 부분만 밝게, 나머지는 0
+            # 게임 시작/재시작시에는 초기화 후 장 채움(또는 이전 프레임이 없는 경우)
+            if self.prev_frame is None:
+                # 첫번째 프레임은 움직임이 없으므로 전부 0(검은 화면)
+                self.prev_frame = curr_frame
+                diff = cv2.absdiff(curr_frame, curr_frame)
+            else:
+                # 현재 프레임에서 이전 프레임을 빼고, 이전 프레임으로 입력
+                diff = cv2.absdiff(curr_frame, self.prev_frame)
+                self.prev_frame = curr_frame
+            # diff(프레임 차이)에서 확실한 차이(50차이 이상)만 흰색으로
+            # 구름, 달과 배경의 차이 = 37, 장애물과 배경 차이는 172
+            _, processed = cv2.threshold(diff, 50, 255, cv2.THRESH_BINARY)
+        else:
+            processed = curr_frame
+        # 리사이즈 및 노멀라이즈
+        resized = cv2.resize(processed, (self.PIXEL, self.PIXEL), interpolation=cv2.INTER_AREA)
+        normalized = (resized / 255.0).astype(np.float32)
+        return normalized
+
+
 
     # 게임 진행용 함수 (매 프레임마다 호출)
     # 캡처 화면 4장을 전처리 후 스태킹해서 텐서 형태로 리턴
     def get_next_state(self, isfirst=False):
-        """
-        프레임 이미지 간 차이(differenct)를 구해 스태킹
-        """
-        # 현재 프레임 생성
-        curr_frame = self.capture()
-        # 게임 시작/재시작시에는 초기화 후 장 채움(또는 이전 프레임이 없는 경우)
-        if isfirst or self.prev_frame is None:
-            # 첫번째 프레임은 움직임이 없으므로 전부 0(검은 화면)
-            self.prev_frame = curr_frame
-            diff = cv2.absdiff(curr_frame, curr_frame)
-        else:
-            # 현재 프레임에서 이전 프레임을 빼고, 이전 프레임으로 입력
-            diff = cv2.absdiff(curr_frame, self.prev_frame)
-            self.prev_frame = curr_frame
-        # diff(프레임 차이)에서 확실한 차이(50차이 이상)만 흰색으로
-        # 구름, 달과 배경의 차이 = 37, 장애물과 배경 차이는 172
-        _, thresh = cv2.threshold(diff, 50, 255, cv2.THRESH_BINARY)
-        # 리사이즈 및 노멀라이즈
-        resized = cv2.resize(thresh, (64, 64), interpolation=cv2.INTER_AREA)
-        normalized = (resized / 255.0).astype(np.float32)
-        
+        normalized = self.get_processed_image()
         if isfirst:
             # 처음엔 최초 diff=0으로 4장을 채움
             self.frames_stacked.clear()
