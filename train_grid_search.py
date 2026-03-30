@@ -24,7 +24,7 @@ def run_grid_search():
             '--buffer_type', str(buf),
             '--target_update', str(target),
             '--num_episodes', str(episodes),
-            '--with_no_log'
+            '--without_log'
         ]
 
         # 3. subprocess 로 훈련 스크립트 실행

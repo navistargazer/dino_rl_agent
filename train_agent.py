@@ -57,7 +57,7 @@ class HyperParameters:
     tau: float = 0.005
     learning_rate: float = 0.0001
     gamma: float = 0.99
-    with_no_log: bool = False
+    without_log: bool = False
     # 들어온 값을 enum 오브젝트로 캐스팅
     def __post_init__(self):
         self.dqn_type = DQNType(self.dqn_type)
@@ -102,7 +102,7 @@ class TrainAgent:
         self.LEARNING_RATE = hp.learning_rate
         # 미래가치 할인율
         self.GAMMA = hp.gamma
-        self.LOGGING = not hp.with_no_log
+        self.LOGGING = not hp.without_log
         print(f'[INFO] DQN:{self.DQN_Type.name}, buffer:{self.BUFFER_TYPE.name}, TargetUpdate:{self.TARGET_UPDATE.name}')
 
         # 디바이스 설정
@@ -206,11 +206,13 @@ class TrainAgent:
                     epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     q_values = self.model(state.to(self.device))
+                    act_idx = _argmax(q_values).item()
+
                     if epi_frame_cnt == 1:
                         max_q = _max(q_values).item()
                     if epi_frame_cnt % 10 == 0:
                         self.xprint("#", end="", flush=True)
-                    act_idx = _argmax(q_values).item()
+                    
                     # 2. 다음 상태로 진행
                     next_state, reward, done = self._step(act_idx)
                     # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
@@ -223,13 +225,14 @@ class TrainAgent:
 
                 # 에피소드 종료 생존시간
                 survival_time = time.time() - epi_start_time
+                # 기록
                 self.history_q_values.append(max_q)
                 self.history_survived.append(survival_time)
-                survival_record.append(survival_time)
                 # 결과 출력
                 self.xprint(
                     f"\nTest{i} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f}"
                 )
+                survival_record.append(survival_time)
         
         # 모델 훈련 모드로 복귀
         self.model.train()
@@ -430,7 +433,7 @@ if __name__ == "__main__":
     parser.add_argument("--buffer_type", type=int, choices=[0, 1, 2], help="경험 기억용 버퍼 타입(0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)")
     parser.add_argument("--target_update", type=int, choices=[0, 1], help="타겟 네트워크 업데이트 타입(0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)")
     parser.add_argument("--num_episodes", type=int, help="훈련 반복 수")
-    parser.add_argument("--with_no_log", action="store_true", help="로그 및 이미지 출력 여부")
+    parser.add_argument("--without_log", action="store_true", help="로그 및 이미지 출력 여부")
     
     # 3. 입력값 파싱
     args = parser.parse_args()
