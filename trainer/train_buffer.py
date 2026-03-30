@@ -4,6 +4,9 @@ import numpy as np
 
 
 def train_buffer(model, target_model, optimizer, batch, device, push_to_priority, dqn_ver=3, gamma=0.99):
+    """
+    미니 배치 훈련 : 기억 버퍼(우선도/노멀)에서 랜덤 추출한 경험을 미분/역전파/최적화
+    """
     # 1. 데이터 전처리 파트
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)

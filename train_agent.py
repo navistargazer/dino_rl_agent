@@ -187,7 +187,7 @@ class TrainAgent:
         # 모델 훈련 모드로 복귀
         self.model.train()
         # 그래프 저장
-        draw_plots(self.history_survived, selfhistory_q_values, self.plot_path)
+        draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 최대 생존 시간
         best_score = max(survival_record)
@@ -207,8 +207,14 @@ class TrainAgent:
     # 에이전트 훈련 함수
     def train_agent(self):
         """
-        훈련 루프
-
+        에피소드 수 만큼 반복 훈련
+        1. 현재 프레임(상태)에서 최대 Q값에 의한 행동 선택
+        2. 다음 state 정보를 받음
+        3. 행동/상태 결과를 메모리 버퍼에 저장
+        4. 버퍼에서 랜덤으로 기억을 꺼내서 역전파 학습
+        5. 다음 프레임으로 넘어감
+        6. 에피소드 종료 시 학습률, 타겟 네트워크, 엡실론 갱신(점진적으로 감소)
+        7. 텐서보드로 로깅
         """
 
         # while루프 내 라이브러러 캐싱
@@ -310,7 +316,7 @@ class TrainAgent:
                 episode_since_update += 1
                 # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트
                 if frame_since_update > self.UPDATE_FREQ and episode_since_update >= 3:
-                    target_model.load_state_dict(model.state_dict())
+                    self.target_model.load_state_dict(self.model.state_dict())
                     print(
                         f"\n타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
                     )
