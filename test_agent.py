@@ -51,7 +51,6 @@ def test_agent():
     survival_records = []
     reward_records = []
 
-    _get_q_values = env.get_q_values
     _restart_game = env.restart_game
     _step = env.step
     _argmax = torch.argmax
@@ -75,7 +74,7 @@ def test_agent():
                 if epi_frame_cnt % 30 == 0:
                     print(".", end="", flush=True)
 
-                q_values = _get_q_values()
+                q_values = model(state.to(device))
                 action = _argmax(q_values).item()
 
                 epi_frame_cnt += 1

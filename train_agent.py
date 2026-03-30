@@ -114,8 +114,8 @@ class TrainAgent:
             self.device = torch.device("cpu")
         self.xprint(f"사용 디바이스: {self.device}")
 
-        # # 강화학습에서는 pytorch의 과도한 멀티스레드에 의한 cpu오버헤드 방지
-        # torch.set_num_threads(1)
+        # 강화학습에서는 pytorch의 과도한 멀티스레드에 의한 cpu오버헤드 방지
+        torch.set_num_threads(1)
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
@@ -124,11 +124,10 @@ class TrainAgent:
         self.target_model = CNN(num_actions=3, input_pixel=self.PIXEL).to(self.device)  # 목표 신경망
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
-        env = Environment(self.model, self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING)
+        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING)
         # 환경 함수 캐싱
-        self._get_q_values = env.get_q_values
-        self._restart_game = env.restart_game
-        self._step = env.step
+        self._restart_game = self.env.restart_game
+        self._step = self.env.step
         
         
         self.frame_time = 1.0 / self.FPS
@@ -189,8 +188,6 @@ class TrainAgent:
         self.model.eval()
         # 생존 시간 기록
         survival_record = []
-        _time = time.time
-        _sleep = time.sleep
         _argmax = torch.argmax
         _max = torch.max
 
@@ -200,15 +197,15 @@ class TrainAgent:
         with torch.no_grad():
             for i in range(num_test):
                 state, done = self._restart_game()
-                epi_start_time = _time()
+                epi_start_time = time.time()
                 reward_sum = 0.0
                 epi_frame_cnt = 0
                 # 단일 에피소드 시작
                 while not done:
-                    start = _time()
+                    start = time.time()
                     epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
-                    q_values = self._get_q_values()
+                    q_values = self.model(state.to(self.device))
                     if epi_frame_cnt == 1:
                         max_q = _max(q_values).item()
                     if epi_frame_cnt % 10 == 0:
@@ -217,15 +214,15 @@ class TrainAgent:
                     # 2. 다음 상태로 진행
                     next_state, reward, done = self._step(act_idx)
                     # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
-                    interval = _time() - start
+                    interval = time.time() - start
                     if interval < self.frame_time:
-                        _sleep(self.frame_time - interval)
+                        time.sleep(self.frame_time - interval)
                     elif interval > self.frame_time + 0.01:
                         self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
                     reward_sum += reward
 
                 # 에피소드 종료 생존시간
-                survival_time = _time() - epi_start_time
+                survival_time = time.time() - epi_start_time
                 self.history_q_values.append(max_q)
                 self.history_survived.append(survival_time)
                 survival_record.append(survival_time)
@@ -268,12 +265,10 @@ class TrainAgent:
         """
 
         # while루프 내 라이브러러 캐싱
-        _time = time.time
         _max = torch.max
         _argmax = torch.argmax
         _rand = np.random.rand
         _randint = np.random.randint
-        _sleep = time.sleep
 
         _push = self.replaybuffer.push
         _sample = self.replaybuffer.sample
@@ -290,7 +285,7 @@ class TrainAgent:
             state, done = self._restart_game()
             # time.sleep(1)
             # q-value 시각화 준비
-            epi_start_time = _time()
+            epi_start_time = time.time()
             epi_frame_cnt = 0
             reward_sum, max_q = 0.0, 0.0
             # d3qn 시각화 준비
@@ -299,31 +294,33 @@ class TrainAgent:
 
             # 단일 에피소드 시작
             while not done:
-                start = _time()
+                start = time.time()
                 epi_frame_cnt += 1
                 frame_since_update += 1
                 # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
                 # dueling dqn의 경우 V와 A도 받아서 시각화
                 # q값 연선에서는 기울기 계산은 필요 없음(나중에 배치 훈련에서만 역전파 업데이트)
                 with torch.no_grad():
+                    # 현재 state를 device에 올리고 신경망 모델에서 q값을 받아옴
                     # dueling에서는 V값과 A값을 받아와서 시각화 등이 가능함.
-                    if self.DQN_Type < DQNType.DUELING:
-                        q_values = self._get_q_values()
-                    else:
-                        q_values, val, adv = self._get_q_values(return_dueling=True)
+                    if self.DQN_Type == DQNType.DUELING:
+                        q_values, val, adv = self.model(state.to(self.device), return_dueling=True)
                         avg_value = val.mean().item()
                         sum_value += avg_value
                         avg_advantage = (adv.max(dim=1)[0] - adv.min(dim=1)[0]).mean().item()
                         sum_advantage += avg_advantage
-                    # 에피소드 시작 시 최대 Q값을 시각화
-                    if epi_frame_cnt == 1:
-                        max_q = _max(q_values).item()
+                    else:
+                        q_values = self.model(state.to(self.device))
 
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:
                         act_idx = _randint(3)                # 랜덤(0:대기, 1:점프, 2:숙이기)
                     else:
                         act_idx = _argmax(q_values).item()   # 최대 가지를 가진 행동의 인덱스를 선택
+                    
+                    # 에피소드 시작 시 최대 Q값을 시각화
+                    if epi_frame_cnt == 1:
+                        max_q = _max(q_values).item()
 
                 # 2. 1스텝 진행(다음 상태 확인)
                 next_state, reward, done = self._step(act_idx)
@@ -350,18 +347,24 @@ class TrainAgent:
                             )
 
                 # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
-                interval = _time() - start
+                interval = time.time() - start
                 if interval < self.frame_time:
-                    _sleep(self.frame_time - interval)
+                    time.sleep(self.frame_time - interval)
                 elif interval > self.frame_time + 0.01:
                     self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
 
                 # 7. 다음 상태를 저장(기억 버퍼에 현재 상태로 전달되는 임시 변수 역할)
                 state = next_state
                 reward_sum += reward
+            # 렉걸릴 때는 그냥 넘김
+            if epi_frame_cnt < 1:
+                print("#", end="", flush=True)
+                time.sleep(0.0167)
+                continue
+
 
             # 에피소드 종료 생존시간
-            survival_time = _time() - epi_start_time
+            survival_time = time.time() - epi_start_time
 
             # 타겟 하드 업데이트
             if self.TARGET_UPDATE == TargetUpdate.HARD:
@@ -381,6 +384,11 @@ class TrainAgent:
 
             # 베스트 모델 저장 & 학습률 감소
             if (episode + 1) % 100 == 0:
+                # 사망 시 에이전트의 시야 확인
+                frames = next_state.squeeze(0).numpy()
+                frames = (frames * 255).astype(np.uint8)
+                self.env.vision.record_death(frames, episode)
+                # 실제 테스트로 모델 검증
                 self.xprint(f"{episode + 1}에피소드 완료. 모델 테스트 5회 진행 중")
                 self.validate_model(num_test=5)
                 # 학습률 감소
@@ -399,8 +407,8 @@ class TrainAgent:
             _add_scalar("Performance/2_Total_Reward", reward_sum, episode)
             _add_scalar("Brain/Max Q-Value", max_q, episode)
             if self.DQN_Type == DQNType.DUELING:
-                _add_scalar("Brain/Average Value", avg_value / epi_frame_cnt, episode)
-                _add_scalar("Brain/Average Advantage", avg_advantage / epi_frame_cnt, episode)
+                _add_scalar("Brain/Average Value", sum_value / epi_frame_cnt, episode)
+                _add_scalar("Brain/Average Advantage", sum_advantage / epi_frame_cnt, episode)
             self.writer.flush()
 
         # 훈련 종료

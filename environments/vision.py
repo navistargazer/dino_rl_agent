@@ -15,7 +15,7 @@ class Vision:
         path = os.path.join(cur_dir, 'template.png')
         self.monitor = self.find_monitor(path, logging)
         self.frames_stacked = deque(maxlen=4)
-        self.isgameover = False
+        self.gameover_detected = False
         self.prev_frame = None
 
     def find_monitor(self, template_path, logging=True):
@@ -119,7 +119,7 @@ class Vision:
         bg_pixel = int(gray[0, 100])
         gameover = gray[0:3, 200:205].astype(int)
         diff_area = np.abs(gameover - bg_pixel)
-        self.isgameover = np.max(diff_area) > 100
+        self.gameover_detected = np.max(diff_area) > 100
         return gray
 
     def get_processed_image(self):
@@ -169,53 +169,39 @@ class Vision:
         state = torch.from_numpy(np.stack(self.frames_stacked, axis=0)).unsqueeze(0)
         return state
 
+    def record_death(self, frames, episode):
+        death_img = cv2.vconcat([frames[0], frames[1], frames[2], frames[3]])
+        cv2.imwrite(f"death/death_{episode}.png", death_img)
+
 if __name__ == "__main__":
     # 1. Vision 객체 생성
     vision = Vision()
     
     import time
-    print("크롬 공룡 게임 창을 클릭해서 활성화해 주세요! (10초 뒤 캡처 시작)")
+    print("크롬 공룡 게임 창을 클릭해서 활성화해 주세요! (5초 뒤 캡처 시작)")
     time.sleep(10)
     
-    # 원본 흑백 프레임 4장을 모아둘 큐 (테스트 시각화용)
     original_frames_q = deque(maxlen=4)
-    
-    # 2. 첫 프레임 초기화
     state_tensor = vision.get_next_state(isfirst=True)
-    original_frames_q.append(vision.prev_frame) # 첫 원본 프레임 저장
+    original_frames_q.append(vision.prev_frame)
     
-    # 3. 공룡이 실제로 달리는 궤적을 얻기 위해 프레임 진행
-    print("달리는 모션을 캡처하는 중입니다...")
+    print("캡처 진행 중... (0.0167초 간격)")
     for _ in range(15):
-        time.sleep(1.0 / 15.0) # 게임 프레임(15 FPS) 속도에 맞춰 대기
-        state_tensor = vision.get_next_state(isfirst=False)
-        original_frames_q.append(vision.prev_frame) # 매 프레임 원본 흑백 저장
+        # 💡 방금 step 함수에 적용하신 1/60초 대기를 똑같이 줍니다.
+        time.sleep(0.0167) 
         
-    # --- [이미지 1: 원본 흑백 화면 세로로 4장 스택] ---
-    # original_frames_q에는 과거(위) -> 현재(아래) 순서로 4장의 원본 이미지가 들어있음
+        state_tensor = vision.get_next_state(isfirst=False)
+        original_frames_q.append(vision.prev_frame)
+        
+    # 시각화 및 저장 로직 (기존 코드와 동일)
     gray_stack = cv2.vconcat(list(original_frames_q))
     
-    # --- [이미지 2: 공룡의 시야 (Diff) 세로로 4장 스택] ---
-    # 텐서에서 이미지를 꺼내어 0~255 값으로 복원
     frames = state_tensor.squeeze(0).numpy()
     frames = (frames * 255).astype(np.uint8)
-    # 과거(위) -> 현재(아래) 순서로 세로 스택
     diff_stack = cv2.vconcat([frames[0], frames[1], frames[2], frames[3]])
     
-    # ---------------------------
-    
-    # 파일로 각각 저장
-    save_gray_path = "gray_original_4stack.png"
-    save_diff_path = "ai_vision_4stack.png"
-    cv2.imwrite(save_gray_path, gray_stack)
-    cv2.imwrite(save_diff_path, diff_stack)
-    
-    print(f"캡처 완료! '{save_gray_path}'와 '{save_diff_path}' 파일이 저장되었습니다.")
-    print("창을 닫거나 아무 키나 누르면 프로그램이 종료됩니다.")
-    
-    # 화면에 창 2개 띄우기 (확대 없이 원본 크기 그대로)
-    cv2.imshow("1) Original Gray (4 Stack)", gray_stack)
-    cv2.imshow("2) AI Vision Diff (4 Stack)", diff_stack)
+    cv2.imwrite("Original_Gray_4_Stack.png", gray_stack)
+    cv2.imwrite("AI_Vision_Diff_4_Stack.png", diff_stack)
     
     cv2.waitKey(0)
     cv2.destroyAllWindows()
