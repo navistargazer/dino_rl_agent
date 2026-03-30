@@ -1,6 +1,7 @@
 matplotlib
 mss
 numpy
+pandas
 pyautogui
 torch
 opencv-python
