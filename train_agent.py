@@ -226,9 +226,9 @@ class TrainAgent:
 
                 # 에피소드 종료 생존시간
                 survival_time = time.time() - epi_start_time
-                # 기록
-                self.history_q_values.append(max_q)
-                self.history_survived.append(survival_time)
+                # # 기록
+                # self.history_q_values.append(max_q)
+                # self.history_survived.append(survival_time)
                 # 결과 출력
                 self.xprint(
                     f"\nTest{i} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f}"
@@ -237,8 +237,8 @@ class TrainAgent:
         
         # 모델 훈련 모드로 복귀
         self.model.train()
-        # 그래프 저장
-        draw_plots(self.history_survived, self.history_q_values, self.plot_path)
+        # # 그래프 저장
+        # draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 최대 생존 시간
         best_score = max(survival_record)
@@ -369,6 +369,9 @@ class TrainAgent:
 
             # 에피소드 종료 생존시간
             survival_time = time.time() - epi_start_time
+            # 기록
+            self.history_q_values.append(max_q)
+            self.history_survived.append(survival_time)
 
             # 타겟 하드 업데이트
             if self.TARGET_UPDATE == TargetUpdate.HARD:
@@ -414,6 +417,8 @@ class TrainAgent:
                 _add_scalar("Brain/Average Value", sum_value / epi_frame_cnt, episode)
                 _add_scalar("Brain/Average Advantage", sum_advantage / epi_frame_cnt, episode)
             self.writer.flush()
+            # 그래프 저장
+            draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 훈련 종료
         self.writer.close()
