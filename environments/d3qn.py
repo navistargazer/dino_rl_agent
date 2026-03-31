@@ -25,11 +25,11 @@ class D3QN(nn.Module):
 
         # Dueling Network
         # 1. 가치(Value) 흐름 - value of state
-        self.value_fc = nn.Linear(flatten_size, 512)  # (1, 512)
+        self.value_fc = nn.Linear(flatten_size + 1, 512)  # (1, 512)
         self.value = nn.Linear(512, 1)  # (1, 1)
 
         # 2. 행동(Advantage) 흐름 - advantage of action
-        self.adv_fc = nn.Linear(flatten_size, 512)  # (1, 512)
+        self.adv_fc = nn.Linear(flatten_size + 1, 512)  # (2, 512)
         self.advantage = nn.Linear(512, num_actions)  # (1, 3)
 
         # (선택) 가중치 초기화: ReLU를 사용하는 네트워크의 국룰

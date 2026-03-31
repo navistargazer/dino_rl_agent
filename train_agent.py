@@ -54,7 +54,7 @@ class HyperParameters:
     epsilon_min: float = 0.05
     epsilon_decay: float = 0.995
     update_freq: int = 1000
-    tau: float = 0.005
+    tau: float = 0.002
     learning_rate: float = 0.0001
     gamma: float = 0.99
     without_log: bool = False
@@ -205,7 +205,11 @@ class TrainAgent:
                     start = time.time()
                     epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
-                    q_values = self.model(state.to(self.device))
+                    img, tick = state
+                    img_tensor = img.to(self.device)
+                    tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
+                    state = (img_tensor, tick_tensor)
+                    q_values = self.model(state)
                     act_idx = _argmax(q_values).item()
 
                     if epi_frame_cnt == 1:
@@ -307,14 +311,20 @@ class TrainAgent:
                 with torch.no_grad():
                     # 현재 state를 device에 올리고 신경망 모델에서 q값을 받아옴
                     # dueling에서는 V값과 A값을 받아와서 시각화 등이 가능함.
+                    # state의 이미지 스택과 시간틱을 언패킹해서 텐서로 변환 후 gpu로
+                    img, tick = state
+                    img_tensor = img.to(self.device)
+                    tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
+                    state_tensor = (img_tensor, tick_tensor)
+
                     if self.DQN_Type == DQNType.DUELING:
-                        q_values, val, adv = self.model(state.to(self.device), return_dueling=True)
+                        q_values, val, adv = self.model(state_tensor, return_dueling=True)
                         avg_value = val.mean().item()
                         sum_value += avg_value
                         avg_advantage = (adv.max(dim=1)[0] - adv.min(dim=1)[0]).mean().item()
                         sum_advantage += avg_advantage
                     else:
-                        q_values = self.model(state.to(self.device))
+                        q_values = self.model(state_tensor)
 
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:

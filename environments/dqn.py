@@ -22,7 +22,7 @@ class DQN(nn.Module):
         # FC 층(Q-Value 계산)
         # 64x64 이미지가 세 번의 conv를 거치면 4x4 크기가 됨 (1024 = 64 * 4 * 4)
         flatten_size = 64 * pixel * pixel
-        self.fc1 = nn.Linear(flatten_size, 512)  # (1, 512)
+        self.fc1 = nn.Linear(flatten_size + 1, 512)  # (1, 512)
         self.fc2 = nn.Linear(512, num_actions)  # (1, 3)
 
         # (선택) 가중치 초기화: ReLU를 사용하는 네트워크의 국룰
