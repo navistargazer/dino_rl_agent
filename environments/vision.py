@@ -11,8 +11,8 @@ class Vision:
         self.PIXEL = pixel
         print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE}, 이미지 크기: {self.PIXEL}x{self.PIXEL}')
         self.sct = mss.mss()
-        cur_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(cur_dir, 'templates')
+        self.cur_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(self.cur_dir, 'templates')
         self.monitor = self.find_monitor(path, logging)
         self.frames_stacked = deque(maxlen=4)
         self.gameover_detected = False
@@ -182,7 +182,10 @@ class Vision:
 
     def record_death(self, frames, episode):
         death_img = cv2.vconcat([frames[0], frames[1], frames[2], frames[3]])
-        cv2.imwrite(f"death/death_{episode}.png", death_img)
+        path = os.path.join(self.cur_dir, 'death')
+        os.makedirs(path, exist_ok=True)
+        cv2.imwrite(os.path.join(path, f"death_{episode}.png"), death_img)
+        print(f'{episode}에서의 사망 프레임 스택을 저장했습니다.')
 
 if __name__ == "__main__":
     # 1. Vision 객체 생성
