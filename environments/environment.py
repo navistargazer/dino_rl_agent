@@ -9,6 +9,7 @@ class Environment:
         self.is_not_mac = platform.system() != "Darwin"
         self.vision = Vision(img_process_type, pixel, logging=logging)
         self.action = Action()
+        self.tick = 0
         self.state = self.vision.get_next_state(isfirst=True)
         self.reward = 0
         self.coord = (self.vision.monitor["left"], self.vision.monitor["top"])
@@ -18,6 +19,7 @@ class Environment:
         return self.vision.gameover_detected
 
     def restart_game(self):
+        self.tick = 0
         start = time.time()
         self.action.click(self.coord)
         while not self.is_game_over:
@@ -34,8 +36,9 @@ class Environment:
         for _ in range(5):
             self.state = self.vision.get_next_state()
             time.sleep(0.2)
+        state = (self.state, self.tick)
         self.reward = 0
-        return self.state, self.is_game_over
+        return state, self.is_game_over
 
     def step(self, action):
         # action = 0(아무것도 안함)이라면 1프레임 기다림
@@ -54,8 +57,12 @@ class Environment:
 
         # 행동 이후 상태
         self.state = self.vision.get_next_state()
+        # 상태에 시간 변수를 추가(노멀라이즈 개념으로 작은 값을 더해줌)
+        self.tick += 5e-4
+        state = (self.state, self.tick)
+
         # 보상 설정
         self.reward = -1 if self.is_game_over else 0.001
-        return self.state, self.reward, self.is_game_over
+        return state, self.reward, self.is_game_over
 
 

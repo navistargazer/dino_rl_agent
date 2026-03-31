@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -34,13 +35,17 @@ class DQN(nn.Module):
         pixel = (input_size - kernel_size + 2 * padding) / stride + 1
         return int(pixel)
 
-    def forward(self, x):
+    def forward(self, state):
+        # 상태를 이미지스택과 시간으로 분리
+        x, t = state
         # 합성곱-활성화 3번
         x = F.relu(self.conv1(x))  # (1, 32, 16, 16)
         x = F.relu(self.conv2(x))  # (1, 64, 8, 8)
         x = F.relu(self.conv3(x))  # (1, 64, 4, 4)
         # 데이터를 1차원으로 flatten
         x = x.view(x.size(0), -1)  # (1, 1024)
+        # 시간을 텐서에 붙여줌
+        x = torch.cat((x, t), dim=1)  # (1, 1025)
         # FC 층
         x = F.relu(self.fc1(x))  # (512)
         # Q-Value 계산(행동별 점수)

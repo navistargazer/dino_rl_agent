@@ -11,22 +11,22 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
     # batch 데이터를 언패킹
     states, actions, rewards, next_states, dones = zip(*batch)
 
+    # states를 이미지스택과 시간으로 언패킹
+    img_stacks, ticks = zip(*states)
+    next_img_stacks, next_ticks = zip(*next_states)
+
     # tensor인 states 들은 cat(합침)
-    states_tensor = torch.cat(states, dim=0).to(device)  # (32, 4, 84, 84)
-    next_states_tensor = torch.cat(next_states, dim=0).to(device)  # (32, 4, 84, 84)
+    img_stacks_tensor = torch.cat(img_stacks, dim=0).to(device)  # (32, 4, 84, 84)
+    next_img_stacks_tensor = torch.cat(next_img_stacks, dim=0).to(device)  # (32, 4, 84, 84)
 
     # 텐서가 아닌 리스트는 tensor로 변환
     # actions_tensor = torch.tensor(actions, dtype=torch.int64).unsqueeze(1).to(device)
     # 텐서로 변환하는 것보다는 numpy 배열로 만든 후 텐서로 참조만 하는 제로카피가 더 빠름
-    actions_tensor = (
-        torch.as_tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device)
-    )  # 나중에 q밸류 인덱싱을 위해 int64로
-    rewards_tensor = (
-        torch.as_tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device)
-    )
-    dones_tensor = (
-        torch.as_tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device)
-    )  # 벨만방정식 연산을 위해 float32로
+    ticks_tensor = torch.as_tensor(np.array(ticks), dtype=torch.float32).unsqueeze(1).to(device)
+    next_ticks_tensor = torch.as_tensor(np.array(next_ticks), dtype=torch.float32).unsqueeze(1).to(device)
+    actions_tensor = (torch.as_tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device))  # 나중에 q밸류 인덱싱을 위해 int64로
+    rewards_tensor = (torch.as_tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device))
+    dones_tensor = (torch.as_tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device))  # 벨만방정식 연산을 위해 float32로
 
     # 2. 훈련 로직(feat. 벨만 방정식)
     """
@@ -35,8 +35,11 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
     다음 상태에서 사망이면 미래가치는 0
     즉 최대수령가능 보상을 정답지로 두고, 현재 얻은 q값과의 오차를 최대한 줄이는 방향으로 역전파
     """
+    # states 텐서 시간 결합
+    states_tensor = (img_stacks_tensor, ticks_tensor)
+    next_states_tensor = (next_img_stacks_tensor, next_ticks_tensor)
     # 현재 상태의 q밸류 쌍 확인
-    q_values = model(states_tensor)  # (32, 2)
+    q_values = model(states_tensor,)  # (32, 2)
     # 그중에 실제로 수행한 action들의 q밸류(gather로 행동별 인덱스의 q값만 추출)
     acted_q = q_values.gather(dim=1, index=actions_tensor)  # (32, 1)
     # avg_q = acted_q.mean().item()
