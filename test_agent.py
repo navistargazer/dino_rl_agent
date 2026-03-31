@@ -82,9 +82,7 @@ class TestAgent:
 
         # 모델 로드
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.model_name = (
-            f"best_model_{self.DQN_Type.name}_DQN_{self.BUFFER_TYPE.name}_Buffer"
-        )
+        self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
         self.model_path = os.path.join(BASE_DIR, f"models/{self.model_name}.pth")
 
         if os.path.exists(self.model_path):

@@ -143,9 +143,9 @@ class TrainAgent:
 
         # 학습 이어하기(모델 저장 파일 로드)
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        model_name = f"best_model_{self.DQN_Type.name}_DQN_{self.BUFFER_TYPE.name}_Buffer_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
-        self.model_path = os.path.join(BASE_DIR, f"models/{model_name}.pth")
-        self.xprint(f"{model_name} 모델 사용,", end=" ")
+        self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
+        self.model_path = os.path.join(BASE_DIR, f"models/{self.model_name}.pth")
+        self.xprint(f"{self.model_name} 모델 사용,", end=" ")
         if os.path.exists(self.model_path):
             checkpoint = torch.load(self.model_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
@@ -163,12 +163,12 @@ class TrainAgent:
         # 그래프 저장 경로
         plot_dir = os.path.join(BASE_DIR, "plots")
         os.makedirs(plot_dir, exist_ok=True)
-        self.plot_path = os.path.join(plot_dir, f"{model_name}_plot.png")
+        self.plot_path = os.path.join(plot_dir, f"{self.model_name}_plot.png")
         # tensorboard 로그 경로
         log_dir = os.path.join(BASE_DIR, "runs")
         os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f"{model_name}_log")
-        self.writer = SummaryWriter(log_path)  # run/model_name 폴더에 로그가 쌓임
+        log_path = os.path.join(log_dir, f"{self.model_name}_log")
+        self.writer = SummaryWriter(log_path)  # run/self.model_name 폴더에 로그가 쌓임
         # dqn 버전이 올라가면 타겟 모델 등장
         if self.DQN_Type > 0:
             # 타겟 모델에 현행 모델의 상태 주입
