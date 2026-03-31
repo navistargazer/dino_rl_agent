@@ -222,6 +222,7 @@ class TrainAgent:
                     elif interval > self.frame_time + 0.01:
                         self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
                     reward_sum += reward
+                    start = next_state
 
                 # 에피소드 종료 생존시간
                 survival_time = time.time() - epi_start_time
