@@ -103,7 +103,7 @@ class TrainAgent:
         # 미래가치 할인율
         self.GAMMA = hp.gamma
         self.LOGGING = not hp.without_log
-        print(f'[INFO] DQN:{self.DQN_Type.name}, buffer:{self.BUFFER_TYPE.name}, TargetUpdate:{self.TARGET_UPDATE.name}')
+        print(f'[INFO] DQN:{self.DQN_Type.name}, buffer:{self.BUFFER_TYPE.name}, ImgProcess:{self.IMG_PROCESS_TYPE.name}, TargetUpdate:{self.TARGET_UPDATE.name}')
 
         # 디바이스 설정
         if torch.cuda.is_available():
@@ -143,7 +143,7 @@ class TrainAgent:
 
         # 학습 이어하기(모델 저장 파일 로드)
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        model_name = f"best_model_{self.DQN_Type.name}_DQN_{self.BUFFER_TYPE.name}_Buffer"
+        model_name = f"best_model_{self.DQN_Type.name}_DQN_{self.BUFFER_TYPE.name}_Buffer_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
         self.model_path = os.path.join(BASE_DIR, f"models/{model_name}.pth")
         self.xprint(f"{model_name} 모델 사용,", end=" ")
         if os.path.exists(self.model_path):

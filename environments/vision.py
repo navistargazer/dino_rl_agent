@@ -12,13 +12,13 @@ class Vision:
         print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE}, 이미지 크기: {self.PIXEL}x{self.PIXEL}')
         self.sct = mss.mss()
         cur_dir = os.path.dirname(os.path.abspath(__file__))
-        path = os.path.join(cur_dir, 'template.png')
+        path = os.path.join(cur_dir, 'templates')
         self.monitor = self.find_monitor(path, logging)
         self.frames_stacked = deque(maxlen=4)
         self.gameover_detected = False
         self.prev_frame = None
 
-    def find_monitor(self, template_path, logging=True):
+    def find_monitor(self, templates_path, logging=True):
         """
         주어진 템플릿 이미지를 화면에서 검색하여 타겟 게임 영역의 논리적 좌표를 반환합니다.
         다중 스케일 템플릿 매칭을 사용하여 HiDPI 및 다양한 UI 배율 환경에 대응합니다.
@@ -31,51 +31,62 @@ class Vision:
         full_screen = np.array(sct_img)
         full_screen_gray = cv2.cvtColor(full_screen, cv2.COLOR_BGRA2GRAY)
         
+        load_success = False
         # 2. 템플릿 이미지 로드
-        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-        if template is None:
-            raise FileNotFoundError(f"[ERROR] 템플릿 이미지를 로드할 수 없습니다: '{template_path}'")
-            
-        tH, tW = template.shape[:2]
-        
-        # 3. 다중 스케일 템플릿 매칭 (0.5x ~ 1.5x, 20 steps)
-        best_match = None 
-        scales = np.linspace(0.5, 1.5, 20)
-        
-        print(f"[INFO] 템플릿 매칭 시작 (스케일 범위: {scales[0]:.2f}x ~ {scales[-1]:.2f}x, {len(scales)}단계)")
-        
-        for scale in scales:
-            resized_w = int(tW * scale)
-            resized_h = int(tH * scale)
-            
-            # 리사이즈된 템플릿이 유효하지 않거나 원본 화면보다 큰 경우 예외 처리
-            if (resized_w < 10 or resized_h < 10 or 
-                resized_w > full_screen_gray.shape[1] or 
-                resized_h > full_screen_gray.shape[0]):
+        for i in range(2):
+            template_path = os.path.join(templates_path, f"template{i}.png")
+            template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+            if template is None:
+                print(f"[ERROR] 템플릿{i} 이미지를 로드할 수 없습니다: '{template_path}'")
                 continue
                 
-            resized_template = cv2.resize(template, (resized_w, resized_h), interpolation=cv2.INTER_AREA)
+            tH, tW = template.shape[:2]
             
-            # CCOEFF_NORMED 매칭 수행 (1.0에 가까울수록 일치율 높음)
-            result = cv2.matchTemplate(full_screen_gray, resized_template, cv2.TM_CCOEFF_NORMED)
-            (_, max_val, _, max_loc) = cv2.minMaxLoc(result)
+            # 3. 다중 스케일 템플릿 매칭 (0.5x ~ 1.5x, 20 steps)
+            best_match = None 
+            scales = np.linspace(0.5, 1.5, 20)
             
-            # 최고 신뢰도(Confidence) 갱신
-            if best_match is None or max_val > best_match[0]:
-                best_match = (max_val, max_loc, scale)
+            print(f"[INFO] 템플릿{i} 매칭 시작 (스케일 범위: {scales[0]:.2f}x ~ {scales[-1]:.2f}x, {len(scales)}단계)")
+            
+            for scale in scales:
+                resized_w = int(tW * scale)
+                resized_h = int(tH * scale)
+                
+                # 리사이즈된 템플릿이 유효하지 않거나 원본 화면보다 큰 경우 예외 처리
+                if (resized_w < 10 or resized_h < 10 or 
+                    resized_w > full_screen_gray.shape[1] or 
+                    resized_h > full_screen_gray.shape[0]):
+                    continue
+                    
+                resized_template = cv2.resize(template, (resized_w, resized_h), interpolation=cv2.INTER_AREA)
+                
+                # CCOEFF_NORMED 매칭 수행 (1.0에 가까울수록 일치율 높음)
+                result = cv2.matchTemplate(full_screen_gray, resized_template, cv2.TM_CCOEFF_NORMED)
+                (_, max_val, _, max_loc) = cv2.minMaxLoc(result)
+                
+                # 최고 신뢰도(Confidence) 갱신
+                if best_match is None or max_val > best_match[0]:
+                    best_match = (max_val, max_loc, scale)
 
-        # 4. 매칭 결과 검증
-        if best_match is None:
-            raise RuntimeError("[ERROR] 유효한 템플릿 매칭을 수행하지 못했습니다.")
+            # 4. 매칭 결과 검증
+            if best_match is None:
+                print("[ERROR] 유효한 템플릿 매칭을 수행하지 못했습니다.")
+                continue
+                
+            (max_val, max_loc, best_scale) = best_match
+            print(f"[INFO] 최적 매칭 결과 - 신뢰도: {max_val:.4f}, 최적 스케일: {best_scale:.2f}x")
             
-        (max_val, max_loc, best_scale) = best_match
-        print(f"[INFO] 최적 매칭 결과 - 신뢰도: {max_val:.4f}, 최적 스케일: {best_scale:.2f}x")
-        
-        # 신뢰도 임계값(Threshold) 검사 (오탐지 방지)
-        THRESHOLD = 0.85
-        if max_val < THRESHOLD:
-            raise RuntimeError(f"[ERROR] 템플릿 매칭 실패 (신뢰도 {max_val:.4f} < {THRESHOLD}). 화면에 대상이 노출되어 있는지 확인하십시오.")
-            
+            # 신뢰도 임계값(Threshold) 검사 (오탐지 방지)
+            THRESHOLD = 0.85
+            if max_val < THRESHOLD:
+                print(f"[ERROR] 템플릿{i} 매칭 실패 (신뢰도 {max_val:.4f} < {THRESHOLD}). 화면에 대상이 노출되어 있는지 확인하십시오.")
+                continue
+            else:
+                print(f"[INFO] 템플릿{i} 매칭 성공 (신뢰도 {max_val:.4f} >= {THRESHOLD}")
+                load_success = True
+                break
+        if not load_success:
+            raise RuntimeError("[ERROR] 게임 종료 화면을 인식하지 못했습니다.")
         # 5. 물리적 좌표를 논리적 좌표로 변환 (HiDPI 보정)
         physical_h, physical_w = full_screen_gray.shape
         scale_factor_x = physical_w / monitor['width']
