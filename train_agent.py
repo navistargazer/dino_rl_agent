@@ -45,7 +45,7 @@ class HyperParameters:
     buffer_type: BufferType = BufferType.HYBRID
     target_update: TargetUpdate = TargetUpdate.SOFT
     pixel: int = 64
-    num_episodes: int = 1000
+    num_episodes: int = 3000
     batch_size: int = 32
     p_ratio: float = 0.5
     p_buffer_size: int = 10000
@@ -54,7 +54,7 @@ class HyperParameters:
     epsilon_min: float = 0.05
     epsilon_decay: float = 0.995
     update_freq: int = 1000
-    tau: float = 0.002
+    tau: float = 0.001
     learning_rate: float = 0.0001
     gamma: float = 0.99
     without_log: bool = False
@@ -142,9 +142,9 @@ class TrainAgent:
         self.epsilon = 1.0
 
         # 학습 이어하기(모델 저장 파일 로드)
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
-        self.model_path = os.path.join(BASE_DIR, f"models/{self.model_name}.pth")
+        self.model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
         self.xprint(f"{self.model_name} 모델 사용,", end=" ")
         if os.path.exists(self.model_path):
             checkpoint = torch.load(self.model_path)
@@ -155,17 +155,17 @@ class TrainAgent:
                 f"이어서 학습 시작 (기존 최고 생존: {self.best_score} / Epsilon: {self.epsilon:.3f})"
             )
         else:
-            os.makedirs(os.path.join(BASE_DIR, "models"), exist_ok=True)
+            os.makedirs(os.path.join(self.BASE_DIR, "models"), exist_ok=True)
             self.best_score = 0
             self.epsilon = 1.0
             self.xprint("새로운 학습 시작")
         
         # 그래프 저장 경로
-        plot_dir = os.path.join(BASE_DIR, "plots")
+        plot_dir = os.path.join(self.BASE_DIR, "plots")
         os.makedirs(plot_dir, exist_ok=True)
         self.plot_path = os.path.join(plot_dir, f"{self.model_name}_plot.png")
         # tensorboard 로그 경로
-        log_dir = os.path.join(BASE_DIR, "runs")
+        log_dir = os.path.join(self.BASE_DIR, "runs")
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, f"{self.model_name}_log")
         self.writer = SummaryWriter(log_path)  # run/self.model_name 폴더에 로그가 쌓임
@@ -235,7 +235,7 @@ class TrainAgent:
                 # self.history_survived.append(survival_time)
                 # 결과 출력
                 self.xprint(
-                    f"\nTest{i} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f}"
+                    f"\nTest{i}/{num_test} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f}"
                 )
                 survival_record.append(survival_time)
         
@@ -396,15 +396,18 @@ class TrainAgent:
                     episode_since_update = 0
             # 결과 출력
             self.xprint(
-                f"Episode {episode} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f} | Epsilon {self.epsilon:.2f}"
+                f"Episode {episode}/{self.NUM_EPISODES} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f} | Epsilon {self.epsilon:.2f}"
             )
 
             # 베스트 모델 저장 & 학습률 감소
             if (episode + 1) % 100 == 0:
                 # 사망 시 에이전트의 시야 확인
-                frames = next_state.squeeze(0).numpy()
+                img_stack, _ = next_state
+                frames = img_stack.squeeze(0).numpy()
                 frames = (frames * 255).astype(np.uint8)
-                self.env.vision.record_death(frames, episode)
+                record_path = os.path.join(self.BASE_DIR, "results")
+                os.makedirs(record_path, exist_ok=True)
+                self.env.vision.record_death(frames, episode + 1, record_path)
                 # 실제 테스트로 모델 검증
                 self.xprint(f"{episode + 1}에피소드 완료. 모델 테스트 5회 진행 중")
                 self.validate_model(num_test=5)

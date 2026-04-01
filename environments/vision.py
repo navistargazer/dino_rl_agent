@@ -180,11 +180,9 @@ class Vision:
         state = torch.from_numpy(np.stack(self.frames_stacked, axis=0)).unsqueeze(0)
         return state
 
-    def record_death(self, frames, episode):
+    def record_death(self, frames, episode, record_path):
         death_img = cv2.vconcat([frames[0], frames[1], frames[2], frames[3]])
-        path = os.path.join(self.cur_dir, 'death')
-        os.makedirs(path, exist_ok=True)
-        cv2.imwrite(os.path.join(path, f"death_{episode}.png"), death_img)
+        cv2.imwrite(os.path.join(record_path, f"death_{episode}.png"), death_img)
         print(f'{episode}에서의 사망 프레임 스택을 저장했습니다.')
 
 if __name__ == "__main__":
