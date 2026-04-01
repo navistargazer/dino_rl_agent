@@ -245,7 +245,7 @@ class TrainAgent:
         # draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 최대 생존 시간
-        best_score = max(survival_record)
+        best_score = np.median(survival_record).item()
         # 베스트 모델 저장
         if best_score > self.best_score:
             self.best_score = best_score
