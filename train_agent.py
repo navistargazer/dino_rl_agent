@@ -52,7 +52,7 @@ class HyperParameters:
     n_buffer_size: int = 100000
     fps: int = 15
     epsilon_min: float = 0.05
-    epsilon_decay: float = 0.997
+    epsilon_decay: float = 0.995
     update_freq: int = 1000
     tau: float = 0.005
     learning_rate: float = 0.0001
@@ -255,7 +255,7 @@ class TrainAgent:
                         "epsilon": self.epsilon,
             }
             torch.save(checkpoint, self.model_path)
-            self.xprint('베스트 모델이 갱신되었습니다.')
+            self.xprint(f'{best_score:.3f}로 베스트 모델이 갱신되었습니다.')
         else:
             self.xprint("모델 갱신 실패")
 
@@ -344,7 +344,7 @@ class TrainAgent:
 
                 # ===== 미니 배치 훈련(미분 및 역전파) ======
                 # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-                if len(self.replaybuffer) > self.BATCH_SIZE:
+                if len(self.replaybuffer) > self.UPDATE_FREQ:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     train_buffer(
