@@ -9,7 +9,7 @@ class Vision:
     def __init__(self, img_process_type=2, pixel=64, logging=True):
         self.IMG_PROCESS_TYPE = img_process_type
         self.PIXEL = pixel
-        print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE}, 이미지 크기: {self.PIXEL}x{self.PIXEL}')
+        print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE.name}, 이미지 크기: {self.PIXEL}x{self.PIXEL}')
         self.sct = mss.mss()
         self.cur_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(self.cur_dir, 'templates')

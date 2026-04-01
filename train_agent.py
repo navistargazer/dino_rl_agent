@@ -103,7 +103,7 @@ class TrainAgent:
         # 미래가치 할인율
         self.GAMMA = hp.gamma
         self.LOGGING = not hp.without_log
-        print(f'[INFO] DQN:{self.DQN_Type.name}, buffer:{self.BUFFER_TYPE.name}, ImgProcess:{self.IMG_PROCESS_TYPE.name}, TargetUpdate:{self.TARGET_UPDATE.name}')
+        print(f'[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}')
 
         # 디바이스 설정
         if torch.cuda.is_available():
@@ -235,7 +235,7 @@ class TrainAgent:
                 # self.history_survived.append(survival_time)
                 # 결과 출력
                 self.xprint(
-                    f"\nTest{i}/{num_test} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f}"
+                    f"\nTest:{i}/{num_test} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
                 )
                 survival_record.append(survival_time)
         
@@ -396,7 +396,7 @@ class TrainAgent:
                     episode_since_update = 0
             # 결과 출력
             self.xprint(
-                f"Episode {episode}/{self.NUM_EPISODES} | Survived {survival_time:.3f} | Max_Q {max_q:.3f} | Total Reward {reward_sum:.2f} | Epsilon {self.epsilon:.2f}"
+                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
             )
 
             # 베스트 모델 저장 & 학습률 감소
