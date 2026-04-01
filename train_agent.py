@@ -41,20 +41,20 @@ class TargetUpdate(IntEnum):
 @dataclass
 class HyperParameters:
     dqn_type: DQNType = DQNType.DUELING
-    img_process: ImgProcess = ImgProcess.DIFF
+    img_process: ImgProcess = ImgProcess.CANNY
     buffer_type: BufferType = BufferType.HYBRID
     target_update: TargetUpdate = TargetUpdate.SOFT
     pixel: int = 64
     num_episodes: int = 3000
     batch_size: int = 32
     p_ratio: float = 0.5
-    p_buffer_size: int = 10000
-    n_buffer_size: int = 40000
+    p_buffer_size: int = 20000
+    n_buffer_size: int = 100000
     fps: int = 15
     epsilon_min: float = 0.05
-    epsilon_decay: float = 0.995
+    epsilon_decay: float = 0.997
     update_freq: int = 1000
-    tau: float = 0.001
+    tau: float = 0.005
     learning_rate: float = 0.0001
     gamma: float = 0.99
     without_log: bool = False
