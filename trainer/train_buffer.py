@@ -16,8 +16,8 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
     next_img_stacks, next_ticks = zip(*next_states)
 
     # tensor인 states 들은 cat(합침)
-    img_stacks_tensor = torch.cat(img_stacks, dim=0).to(device)  # (32, 4, 84, 84)
-    next_img_stacks_tensor = torch.cat(next_img_stacks, dim=0).to(device)  # (32, 4, 84, 84)
+    img_stacks_tensor = torch.cat(img_stacks, dim=0).to(device)  # (32, 4, 64, 64)
+    next_img_stacks_tensor = torch.cat(next_img_stacks, dim=0).to(device)  # (32, 4, 64, 64)
 
     # 텐서가 아닌 리스트는 tensor로 변환
     # actions_tensor = torch.tensor(actions, dtype=torch.int64).unsqueeze(1).to(device)
@@ -38,9 +38,13 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
     # states 텐서 시간 결합
     states_tensor = (img_stacks_tensor, ticks_tensor)
     next_states_tensor = (next_img_stacks_tensor, next_ticks_tensor)
+    
     # 현재 상태의 q밸류 쌍 확인
-    q_values = model(states_tensor,)  # (32, 2)
+    q_values = model(states_tensor,)  # (32, 3)
     # 그중에 실제로 수행한 action들의 q밸류(gather로 행동별 인덱스의 q값만 추출)
+    # q_values: [[1.2, 0.5], [0.1, 0.9], ...] (배치 사이즈 32)
+    # actions:  [[0],        [1],        ...] (내가 했던 행동들)
+    # acted_q:  [[1.2],      [0.9],      ...] (내가 했던 행동의 q값들)
     acted_q = q_values.gather(dim=1, index=actions_tensor)  # (32, 1)
     # avg_q = acted_q.mean().item()
 
@@ -53,9 +57,9 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
         # 1. nature dqn : target이 다음상태의 가치를 계산 -> 고정된 과녁이나, 타겟이 과대평가할 가능성 존재
         elif dqn_ver == 1:
             # 미래 가치들 확인
-            next_q_values = target_model(next_states_tensor)  # (32, 2)
+            next_q_values = target_model(next_states_tensor)  # (32, 3)
             # 최대 미래가치를 뽑아냄(keepdim=True로 차원 유지, 안쓴다면 unsqueeze(1)을 붙여줘야함)
-            max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]
+            max_next_q_values = next_q_values.max(dim=1, keepdim=True)[0]   #(32, 1)
         # 2. double dqn : 현행 모델이 최선행동을 고르면 타겟모델이 그 가치를 평가 -> 과대평가 가능성 차단
         else:
             # 현행 모델이 다음스텝의 상태를 계산
@@ -68,10 +72,12 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
             max_next_q_values = target_next_q.gather(dim=1, index=best_actions)
 
         # 벨만방정식의 정답지 공식(사망시 미래가치는 증발하는 것을 (1-dones)로 구현)
+        # 결정된 행동에 의한 실제보상(reward) + 할인율 * 예측한 최대 미래 가치 * 생존 여부
+        # 신경망에 의한 행동 가치의 예측값의 정답지는 (실제 보상값) + 다음 상태의 예측값(부트스트래핑 - 예측값이 정답지???)
         target_q = rewards_tensor + gamma * max_next_q_values * (1 - dones_tensor)
 
     # 3. 역전파
-    # 손실함수
+    # 손실함수 : 결과를 본 후 계산된 예측값 - 신경망 예측값 -> 시간차 오차(TD_error)
     loss = F.smooth_l1_loss(acted_q, target_q)
     # 기울기 찌꺼기 제거
     optimizer.zero_grad()

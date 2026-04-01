@@ -7,20 +7,20 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         # 합성곱 계층, 입력:(1, 4, 64, 64)
         self.conv1 = nn.Conv2d(
-            input_channels, 32, kernel_size=7, stride=4, padding=2
-        )  # (1, 32, 16, 16)
-        pixel = self.get_pixel_size(input_pixel, kernel_size=7, stride=4, padding=2)
+            input_channels, 32, kernel_size=7, stride=2, padding=3
+        )  # (1, 32, 32, 32)
+        pixel = self.get_pixel_size(input_pixel, kernel_size=7, stride=2, padding=3)
         self.conv2 = nn.Conv2d(
-            32, 64, kernel_size=3, stride=2, padding=1
-        )  # (1, 64, 8, 8)
-        pixel = self.get_pixel_size(pixel, kernel_size=3, stride=2, padding=1)
+            32, 64, kernel_size=5, stride=2, padding=2
+        )  # (1, 64, 16, 16)
+        pixel = self.get_pixel_size(pixel, kernel_size=5, stride=2, padding=2)
         self.conv3 = nn.Conv2d(
             64, 64, kernel_size=3, stride=2, padding=1
-        )  # (1, 64, 4, 4)
+        )  # (1, 64, 8, 8)
         pixel = self.get_pixel_size(pixel, kernel_size=3, stride=2, padding=1)
 
         # FC 층(Q-Value 계산)
-        # 64x64 이미지가 세 번의 conv를 거치면 4x4 크기가 됨 (1024 = 64 * 4 * 4)
+        # 64x64 이미지가 세 번의 conv를 거치면 8x8 크기가 됨 (4096 = 64 * 8 * 8)
         flatten_size = 64 * pixel * pixel
         self.fc1 = nn.Linear(flatten_size + 1, 512)  # (1, 512)
         self.fc2 = nn.Linear(512, num_actions)  # (1, 3)
@@ -39,15 +39,15 @@ class DQN(nn.Module):
         # 상태를 이미지스택과 시간으로 분리
         x, t = state
         # 합성곱-활성화 3번
-        x = F.relu(self.conv1(x))  # (1, 32, 16, 16)
-        x = F.relu(self.conv2(x))  # (1, 64, 8, 8)
-        x = F.relu(self.conv3(x))  # (1, 64, 4, 4)
+        x = F.relu(self.conv1(x))  # (1, 32, 32, 32)
+        x = F.relu(self.conv2(x))  # (1, 64, 16, 16)
+        x = F.relu(self.conv3(x))  # (1, 64, 8, 8)
         # 데이터를 1차원으로 flatten
-        x = x.view(x.size(0), -1)  # (1, 1024)
+        x = x.view(x.size(0), -1)  # (1, 4096)
         # 시간을 텐서에 붙여줌
-        x = torch.cat((x, t), dim=1)  # (1, 1025)
+        x = torch.cat((x, t), dim=1)  # (1, 4097)
         # FC 층
-        x = F.relu(self.fc1(x))  # (512)
+        x = F.relu(self.fc1(x))  # (1, 512)
         # Q-Value 계산(행동별 점수)
-        q_values = self.fc2(x)  # (3)
+        q_values = self.fc2(x)  # (1, 3)
         return q_values
