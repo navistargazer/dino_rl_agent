@@ -41,16 +41,16 @@ class TargetUpdate(IntEnum):
 @dataclass
 class HyperParameters:
     dqn_type: DQNType = DQNType.DUELING
-    img_process: ImgProcess = ImgProcess.CANNY
+    img_process: ImgProcess = ImgProcess.DIFF
     buffer_type: BufferType = BufferType.HYBRID
-    target_update: TargetUpdate = TargetUpdate.HARD
+    target_update: TargetUpdate = TargetUpdate.SOFT
     pixel: int = 64
-    num_episodes: int = 3000
+    num_episodes: int = 1000
     batch_size: int = 32
     p_ratio: float = 0.5
     p_buffer_size: int = 20000
     n_buffer_size: int = 100000
-    fps: int = 15
+    fps: int = 10
     epsilon_min: float = 0.05
     epsilon_decay: float = 0.995
     update_freq: int = 1000
@@ -334,9 +334,9 @@ class TrainAgent:
                     else:
                         act_idx = _argmax(q_values).item()   # 최대 가지를 가진 행동의 인덱스를 선택
                     
-                    # 에피소드 시작 시 최대 Q값을 시각화
-                    if epi_frame_cnt == 1:
-                        max_q = _max(q_values).item()
+                    # # 에피소드 시작 시 최대 Q값을 시각화
+                    # if epi_frame_cnt == 1:
+                    #     max_q = _max(q_values).item()
 
                 # 2. 1스텝 진행(다음 상태 확인)
                 next_state, reward, done = self._step(act_idx)
@@ -366,7 +366,7 @@ class TrainAgent:
                 interval = time.time() - start
                 if interval < self.frame_time:
                     time.sleep(self.frame_time - interval)
-                elif interval > self.frame_time + 0.01:
+                elif interval > self.frame_time:
                     self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
 
                 # 7. 다음 상태를 저장(기억 버퍼에 현재 상태로 전달되는 임시 변수 역할)
@@ -377,7 +377,7 @@ class TrainAgent:
                 print("#", end="", flush=True)
                 time.sleep(0.0167)
                 continue
-
+            max_q = _max(q_values).item()
 
             # 에피소드 종료 생존시간
             survival_time = time.time() - epi_start_time
@@ -404,9 +404,7 @@ class TrainAgent:
             # 베스트 모델 저장 & 학습률 감소
             if (episode + 1) % 100 == 0:
                 # 사망 시 에이전트의 시야 확인
-                img_stack, _ = next_state
-                frames = img_stack.squeeze(0).numpy()
-                frames = (frames * 255).astype(np.uint8)
+                frames, _ = next_state
                 record_path = os.path.join(self.BASE_DIR, "results")
                 os.makedirs(record_path, exist_ok=True)
                 self.env.vision.record_death(frames, episode + 1, record_path)
