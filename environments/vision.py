@@ -170,7 +170,7 @@ class Vision:
         # return normalized
         # ai의 vision을 시각화
         if self.LOGGING:
-            cv2.imshow('AI Vision', resized)
+            cv2.imshow('AI Vision', processed)
             cv2.waitKey(1)
         return resized
 
