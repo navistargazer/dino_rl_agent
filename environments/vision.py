@@ -5,20 +5,21 @@ from collections import deque
 import os
 
 class Vision:
-    def __init__(self, img_process_type=2, pixel=64, logging=True):
+    def __init__(self, img_process_type=1, pixel=64, logging=True):
         self.IMG_PROCESS_TYPE = img_process_type
         self.PIXEL_H = pixel * 4
         self.PIXEL_V = pixel
+        self.LOGGING = logging
         print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE.name}, 이미지 크기: {self.PIXEL_H}x{self.PIXEL_V}')
         self.sct = mss.mss()
         self.cur_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(self.cur_dir, 'templates')
-        self.monitor = self.find_monitor(path, logging)
+        self.monitor = self.find_monitor(path)
         self.frames_stacked = deque(maxlen=4)
         self.gameover_detected = False
         self.prev_frame = None
 
-    def find_monitor(self, templates_path, logging=True):
+    def find_monitor(self, templates_path):
         """
         주어진 템플릿 이미지를 화면에서 검색하여 타겟 게임 영역의 논리적 좌표를 반환합니다.
         다중 스케일 템플릿 매칭을 사용하여 HiDPI 및 다양한 UI 배율 환경에 대응합니다.
@@ -99,7 +100,7 @@ class Vision:
         OFFSET_X = -230
         OFFSET_Y = -30
         GAME_WIDTH = 384
-        GAME_HEIGHT = 84
+        GAME_HEIGHT = 80
         
         monitor_settings = {
             'top': logic_y + OFFSET_Y,  
@@ -110,7 +111,7 @@ class Vision:
         
         print(f"[INFO] 산출된 캡처 영역 좌표: {monitor_settings}")
         
-        if logging:
+        if self.LOGGING:
             # 7. 시각적 검증 (디버그용)
             check_img = self.sct.grab(monitor_settings)
             cv2.imshow("Capture(Press any key to continue)", cv2.cvtColor(np.array(check_img), cv2.COLOR_BGRA2BGR))
@@ -126,11 +127,16 @@ class Vision:
         gray = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY) 
         # gameover : 배경과 글씨 픽셀의 차이로 판단(낮과 밤 동시 적용됨)
         # self.isgameover = abs(int(gray[0, 0]) - int(gray[0, 185])) > 100.0
+        
         # 맥과 윈도우의 픽셀 밀림을 영역으로 판단함으로써 해결
-        bg_pixel = int(gray[0, 100])
-        gameover = gray[0:3, 200:205].astype(int)
+        bg_pixel = gray[0, 100]
+        gameover = gray[0:3, 200:205].astype(np.int16)
         diff_area = np.abs(gameover - bg_pixel)
         self.gameover_detected = np.max(diff_area) > 100
+
+        # 구름 등 희미한 픽셀을 배경색으로
+        diff_cloud = np.abs(gray.astype(np.int16) - bg_pixel)
+        gray[diff_cloud < 40] = bg_pixel
         return gray
 
     def get_processed_image(self):
@@ -162,6 +168,10 @@ class Vision:
         resized = cv2.resize(processed, (self.PIXEL_H, self.PIXEL_V), interpolation=cv2.INTER_AREA)
         # normalized = (resized / 255.0).astype(np.float32)
         # return normalized
+        # ai의 vision을 시각화
+        if self.LOGGING:
+            cv2.imshow('AI Vision', resized)
+            cv2.waitKey(1)
         return resized
 
 

@@ -40,23 +40,43 @@ class TargetUpdate(IntEnum):
 
 @dataclass
 class HyperParameters:
+    # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
     dqn_type: DQNType = DQNType.DUELING
-    img_process: ImgProcess = ImgProcess.DIFF
+    # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
+    img_process: ImgProcess = ImgProcess.CANNY
+    # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
     buffer_type: BufferType = BufferType.HYBRID
-    target_update: TargetUpdate = TargetUpdate.SOFT
+    # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
+    target_update: TargetUpdate = TargetUpdate.HARD
+    # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
-    num_episodes: int = 1000
+    # 행동 보상 (사망, 대기, 점프, 숙이기)
+    rewards:(float, float, float, float) = (-10, 0.1, 0.05, 0.08)
+    # 훈련 반복 수
+    num_episodes: int = 1500
+    # 미니 배치 훈련에 사용할 과거 경험 개수
     batch_size: int = 32
+    # 우선도 버퍼에서 꺼내는 비율
     p_ratio: float = 0.5
+    # 우선도 버퍼 크기
     p_buffer_size: int = 20000
+    # 노멀 버퍼 크기
     n_buffer_size: int = 100000
+    # 초당 프레임 수
     fps: int = 10
+    # 엡실론(랜덤 탐험 비율) 최소값
     epsilon_min: float = 0.05
+    # 에피소드 당 엡실론 감소율
     epsilon_decay: float = 0.995
+    # 타겟 네트워크 업데이트 주기
     update_freq: int = 1000
+    # 타겟 네트워크 소프트 업데이트 비율
     tau: float = 0.002
+    # 학습률
     learning_rate: float = 0.0001
+    # 미래가치 할인율
     gamma: float = 0.99
+    # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
     # 들어온 값을 enum 오브젝트로 캐스팅
     def __post_init__(self):
@@ -68,42 +88,28 @@ class HyperParameters:
 
 class TrainAgent:
     def __init__(self, hp: HyperParameters = HyperParameters(), logging=True):
-        # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
         self.DQN_Type = hp.dqn_type
-        # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
         self.IMG_PROCESS_TYPE = hp.img_process
-        # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
         self.BUFFER_TYPE = hp.buffer_type
-        # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
         self.TARGET_UPDATE = hp.target_update
-        # CNN 인풋용 리사이즈 픽셀크기
         self.PIXEL = hp.pixel
-        # 훈련 반복 수
+        self.REWARDS = hp.rewards
         self.NUM_EPISODES = hp.num_episodes
-        # 미니 배치 훈련에 사용할 과거 경험 개수
         self.BATCH_SIZE = hp.batch_size
-        # 우선도 버퍼에서 꺼내는 비율 (초기값, 0.2까지 줄어들도록 설계)
         self.P_RATIO = hp.p_ratio
-        # 우선도 버퍼 크기
         self.P_BUFFER_SIZE = hp.p_buffer_size
-        # 우선도 버퍼 크기
         self.N_BUFFER_SIZE = hp.n_buffer_size
-        # 우선도 버퍼 크기
         self.FPS = hp.fps
-        # 엡실론 최소값
         self.EPSILON_MIN = hp.epsilon_min
-        # 엡실론 감소율
         self.EPSILON_DECAY = hp.epsilon_decay
-        # 타겟 네트워크 업데이트 주기
         self.UPDATE_FREQ = hp.update_freq
-        # 타겟 네트워크 소프트 업데이트 비율
         self.TAU = hp.tau
-        # 학습률
         self.LEARNING_RATE = hp.learning_rate
-        # 미래가치 할인율
         self.GAMMA = hp.gamma
         self.LOGGING = not hp.without_log
-        print(f'[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}')
+        
+        # 하이퍼 파라미터 출력
+        print(f'[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 대기, 점프, 숙이기]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}')
 
         # 디바이스 설정
         if torch.cuda.is_available():
@@ -124,7 +130,7 @@ class TrainAgent:
         self.target_model = CNN(num_actions=3, input_pixel=self.PIXEL).to(self.device)  # 목표 신경망
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
-        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING)
+        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING, rewards=self.REWARDS)
         # 환경 함수 캐싱
         self._restart_game = self.env.restart_game
         self._step = self.env.step
@@ -330,6 +336,8 @@ class TrainAgent:
 
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:
+                        if self.epsilon == self.EPSILON_MIN:
+                            self.xprint("epilon action!")
                         act_idx = _randint(3)                # 랜덤(0:대기, 1:점프, 2:숙이기)
                     else:
                         act_idx = _argmax(q_values).item()   # 최대 가지를 가진 행동의 인덱스를 선택
@@ -392,7 +400,7 @@ class TrainAgent:
                 if frame_since_update > self.UPDATE_FREQ and episode_since_update >= 3:
                     self.target_model.load_state_dict(self.model.state_dict())
                     self.xprint(
-                        f"\n타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
+                        f"타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
                     )
                     frame_since_update = 0
                     episode_since_update = 0

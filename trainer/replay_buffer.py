@@ -29,11 +29,11 @@ class ReplayBuffer:
     # batch 수 만큼 랜덤 샘플링
     def sample(self, batch_size, buffer_type, epi_progress):
         # 우선도 버퍼에서 뽑을 샘플 숫자
-        min_ratio = 0.2  # 최저 비율
-        # 에피소드가 진행될수록 우선도 버퍼 비율을 p_ratio에서 min_ratio로 감소
-        p_ratio = self.p_ratio - (self.p_ratio - min_ratio) * epi_progress
+        # min_ratio = 0.2  # 최저 비율
+        # # 에피소드가 진행될수록 우선도 버퍼 비율을 p_ratio에서 min_ratio로 감소
+        # p_ratio = self.p_ratio - (self.p_ratio - min_ratio) * epi_progress
         # 버퍼 수에 따라 p_buffer 사이즈 결정
-        p_size = int(batch_size * p_ratio) if buffer_type > 0 else 0
+        p_size = int(batch_size * self.p_ratio) if buffer_type > 0 else 0
         n_size = batch_size - p_size
 
         # 우선도 버퍼에서 뽑을 숫자가 모자라는 경우
