@@ -43,7 +43,7 @@ class HyperParameters:
     dqn_type: DQNType = DQNType.DUELING
     img_process: ImgProcess = ImgProcess.CANNY
     buffer_type: BufferType = BufferType.HYBRID
-    target_update: TargetUpdate = TargetUpdate.SOFT
+    target_update: TargetUpdate = TargetUpdate.HARD
     pixel: int = 64
     num_episodes: int = 3000
     batch_size: int = 32
@@ -54,7 +54,7 @@ class HyperParameters:
     epsilon_min: float = 0.05
     epsilon_decay: float = 0.995
     update_freq: int = 1000
-    tau: float = 0.005
+    tau: float = 0.002
     learning_rate: float = 0.0001
     gamma: float = 0.99
     without_log: bool = False
@@ -115,7 +115,7 @@ class TrainAgent:
         self.xprint(f"사용 디바이스: {self.device}")
 
         # 강화학습에서는 pytorch의 과도한 멀티스레드에 의한 cpu오버헤드 방지
-        torch.set_num_threads(1)
+        # torch.set_num_threads(1)
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
@@ -206,7 +206,8 @@ class TrainAgent:
                     epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     img, tick = state
-                    img_tensor = img.to(self.device)
+                    # img_tensor = img.to(self.device).float() / 255.0
+                    img_tensor = torch.from_numpy(img).unsqueeze(0).to(self.device).float() / 255.0
                     tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
                     state = (img_tensor, tick_tensor)
                     q_values = self.model(state)
@@ -313,7 +314,8 @@ class TrainAgent:
                     # dueling에서는 V값과 A값을 받아와서 시각화 등이 가능함.
                     # state의 이미지 스택과 시간틱을 언패킹해서 텐서로 변환 후 gpu로
                     img, tick = state
-                    img_tensor = img.to(self.device)
+                    # img_tensor = img.to(self.device).float() / 255.0
+                    img_tensor = torch.from_numpy(img).unsqueeze(0).to(self.device).float() / 255.0
                     tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
                     state_tensor = (img_tensor, tick_tensor)
 
@@ -344,7 +346,7 @@ class TrainAgent:
 
                 # ===== 미니 배치 훈련(미분 및 역전파) ======
                 # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-                if len(self.replaybuffer) > self.UPDATE_FREQ:
+                if len(self.replaybuffer) > self.BATCH_SIZE:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     train_buffer(

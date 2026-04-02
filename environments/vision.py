@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import torch
 import mss
 from collections import deque
 import os
@@ -8,8 +7,9 @@ import os
 class Vision:
     def __init__(self, img_process_type=2, pixel=64, logging=True):
         self.IMG_PROCESS_TYPE = img_process_type
-        self.PIXEL = pixel
-        print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE.name}, 이미지 크기: {self.PIXEL}x{self.PIXEL}')
+        self.PIXEL_H = pixel * 4
+        self.PIXEL_V = pixel
+        print(f'[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE.name}, 이미지 크기: {self.PIXEL_H}x{self.PIXEL_V}')
         self.sct = mss.mss()
         self.cur_dir = os.path.dirname(os.path.abspath(__file__))
         path = os.path.join(self.cur_dir, 'templates')
@@ -159,25 +159,27 @@ class Vision:
         else:
             processed = curr_frame
         # 리사이즈 및 노멀라이즈
-        resized = cv2.resize(processed, (self.PIXEL, self.PIXEL), interpolation=cv2.INTER_AREA)
-        normalized = (resized / 255.0).astype(np.float32)
-        return normalized
+        resized = cv2.resize(processed, (self.PIXEL_H, self.PIXEL_V), interpolation=cv2.INTER_AREA)
+        # normalized = (resized / 255.0).astype(np.float32)
+        # return normalized
+        return resized
 
 
 
     # 게임 진행용 함수 (매 프레임마다 호출)
     # 캡처 화면 4장을 전처리 후 스태킹해서 텐서 형태로 리턴
     def get_next_state(self, isfirst=False):
-        normalized = self.get_processed_image()
+        img = self.get_processed_image()
         if isfirst:
             # 처음엔 최초 diff=0으로 4장을 채움
             self.frames_stacked.clear()
-            self.frames_stacked.extend([normalized] * 4)
+            self.frames_stacked.extend([img] * 4)
         else:
             # 다음 스테이트 용으로 프레임 추가
-            self.frames_stacked.append(normalized)
+            self.frames_stacked.append(img)
 
-        state = torch.from_numpy(np.stack(self.frames_stacked, axis=0)).unsqueeze(0)
+        # state = torch.from_numpy(np.stack(self.frames_stacked, axis=0)).unsqueeze(0)
+        state = np.stack(self.frames_stacked, axis=0)
         return state
 
     def record_death(self, frames, episode, record_path):

@@ -15,18 +15,27 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
     img_stacks, ticks = zip(*states)
     next_img_stacks, next_ticks = zip(*next_states)
 
-    # tensor인 states 들은 cat(합침)
-    img_stacks_tensor = torch.cat(img_stacks, dim=0).to(device)  # (32, 4, 64, 64)
-    next_img_stacks_tensor = torch.cat(next_img_stacks, dim=0).to(device)  # (32, 4, 64, 64)
+    # # tensor인 states 들은 cat(합침)
+    # img_stacks_tensor = torch.cat(img_stacks, dim=0).to(device)  # (32, 4, 64, 64)
+    # next_img_stacks_tensor = torch.cat(next_img_stacks, dim=0).to(device)  # (32, 4, 64, 64)
 
     # 텐서가 아닌 리스트는 tensor로 변환
     # actions_tensor = torch.tensor(actions, dtype=torch.int64).unsqueeze(1).to(device)
     # 텐서로 변환하는 것보다는 numpy 배열로 만든 후 텐서로 참조만 하는 제로카피가 더 빠름
-    ticks_tensor = torch.as_tensor(np.array(ticks), dtype=torch.float32).unsqueeze(1).to(device)
-    next_ticks_tensor = torch.as_tensor(np.array(next_ticks), dtype=torch.float32).unsqueeze(1).to(device)
-    actions_tensor = (torch.as_tensor(np.array(actions), dtype=torch.int64).unsqueeze(1).to(device))  # 나중에 q밸류 인덱싱을 위해 int64로
-    rewards_tensor = (torch.as_tensor(np.array(rewards), dtype=torch.float32).unsqueeze(1).to(device))
-    dones_tensor = (torch.as_tensor(np.array(dones), dtype=torch.float32).unsqueeze(1).to(device))  # 벨만방정식 연산을 위해 float32로
+    # 1. 이미지: CPU에서는 무조건 가벼운 uint8로 묶어서 GPU로 쏜 뒤, GPU 안에서 float으로 변환!
+    img_stacks_tensor = torch.as_tensor(np.array(img_stacks, dtype=np.uint8)).to(device).float() / 255.0
+    next_img_stacks_tensor = torch.as_tensor(np.array(next_img_stacks, dtype=np.uint8)).to(device).float() / 255.0
+
+    # 2. 시간(ticks): CPU에서부터 float32로 묶어서 Zero-copy 전송
+    ticks_tensor = torch.as_tensor(np.array(ticks, dtype=np.float32)).unsqueeze(1).to(device)
+    next_ticks_tensor = torch.as_tensor(np.array(next_ticks, dtype=np.float32)).unsqueeze(1).to(device)
+
+    # 3. 행동(actions): Q-Value 인덱싱(gather)을 위해 정수형 int64 (long)로 묶기
+    actions_tensor = torch.as_tensor(np.array(actions, dtype=np.int64)).unsqueeze(1).to(device) 
+    
+    # 4. 보상(rewards)과 종료여부(dones): 벨만 방정식 연산을 위해 float32로 묶기
+    rewards_tensor = torch.as_tensor(np.array(rewards, dtype=np.float32)).unsqueeze(1).to(device)
+    dones_tensor = torch.as_tensor(np.array(dones, dtype=np.float32)).unsqueeze(1).to(device)
 
     # 2. 훈련 로직(feat. 벨만 방정식)
     """
