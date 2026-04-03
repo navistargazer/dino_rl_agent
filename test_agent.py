@@ -40,7 +40,7 @@ class HyperParameters:
     dqn_type: DQNType = DQNType.DUELING
     img_process: ImgProcess = ImgProcess.CANNY
     buffer_type: BufferType = BufferType.HYBRID
-    target_update: TargetUpdate = TargetUpdate.SOFT
+    target_update: TargetUpdate = TargetUpdate.HARD
     pixel: int = 64
     num_episodes: int = 3000
     batch_size: int = 32
@@ -167,21 +167,21 @@ class TestAgent:
                     epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     img, tick = state
-                    img_tensor = img.to(self.device)
+                    # img_tensor = img.to(self.device).float() / 255.0
+                    img_tensor = torch.from_numpy(img).unsqueeze(0).to(self.device).float() / 255.0
                     tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
                     state = (img_tensor, tick_tensor)
                     q_values = self.model(state)
                     act_idx = _argmax(q_values).item()
 
-                    if epi_frame_cnt % 15 == 0:
-                        self.xprint(".", end="", flush=True)
-
+                    # 2. 다음 상태로 진행
                     next_state, reward, done = self._step(act_idx)
-
+                    # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
                     interval = time.time() - start
                     if interval < self.frame_time:
                         time.sleep(self.frame_time - interval)
-
+                    elif interval > self.frame_time + 0.01:
+                        self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
                     state = next_state
 
                 survival_time = time.time() - epi_start_time
