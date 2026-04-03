@@ -306,7 +306,7 @@ class TrainAgent:
             # d3qn 시각화 준비
             if self.DQN_Type == DQNType.DUELING:
                 sum_value, sum_advantage = 0.0, 0.0
-
+            is_epsilon_act = False
             # 단일 에피소드 시작
             while not done:
                 start = time.time()
@@ -336,10 +336,10 @@ class TrainAgent:
 
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:
-                        if self.epsilon == self.EPSILON_MIN:
-                            self.xprint("epilon action!")
+                        is_epsilon_act = True
                         act_idx = _randint(3)                # 랜덤(0:대기, 1:점프, 2:숙이기)
                     else:
+                        is_epsilon_act = False
                         act_idx = _argmax(q_values).item()   # 최대 가지를 가진 행동의 인덱스를 선택
                     
                     # # 에피소드 시작 시 최대 Q값을 시각화
@@ -406,7 +406,7 @@ class TrainAgent:
                     episode_since_update = 0
             # 결과 출력
             self.xprint(
-                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
+                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f} | Died by Epsilon:{is_epsilon_act}"
             )
 
             # 베스트 모델 저장 & 학습률 감소
