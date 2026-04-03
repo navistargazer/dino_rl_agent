@@ -26,80 +26,37 @@ class ImgProcess(IntEnum):
     CANNY = 1
     DIFF = 2
 
-class BufferType(IntEnum):
-    SINGLE = 0
-    DUAL = 1
-    HYBRID = 2
-
-class TargetUpdate(IntEnum):
-    HARD = 0
-    SOFT = 1
-
 @dataclass
 class HyperParameters:
+    # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
     dqn_type: DQNType = DQNType.DUELING
+    # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
     img_process: ImgProcess = ImgProcess.CANNY
-    buffer_type: BufferType = BufferType.HYBRID
-    target_update: TargetUpdate = TargetUpdate.HARD
+    # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
-    num_episodes: int = 3000
-    batch_size: int = 32
-    p_ratio: float = 0.5
-    p_buffer_size: int = 20000
-    n_buffer_size: int = 100000
-    fps: int = 15
-    epsilon_min: float = 0.05
-    epsilon_decay: float = 0.995
-    update_freq: int = 1000
-    tau: float = 0.005
-    learning_rate: float = 0.0001
-    gamma: float = 0.99
+    # 행동 보상 (사망, 대기, 점프, 숙이기)
+    rewards:tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
+    # 초당 프레임 수
+    fps: int = 10
+    # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
     # 들어온 값을 enum 오브젝트로 캐스팅
     def __post_init__(self):
         self.dqn_type = DQNType(self.dqn_type)
         self.img_process = ImgProcess(self.img_process)
-        self.buffer_type = BufferType(self.buffer_type)
-        self.target_update = TargetUpdate(self.target_update)
 
 
 class TestAgent:
-    def __init__(self, hp: HyperParameters = HyperParameters(), logging=True):
-        # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
+    def __init__(self, hp: HyperParameters = HyperParameters(), model_name, logging=True):
         self.DQN_Type = hp.dqn_type
-        # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
         self.IMG_PROCESS_TYPE = hp.img_process
-        # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
-        self.BUFFER_TYPE = hp.buffer_type
-        # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
-        self.TARGET_UPDATE = hp.target_update
-        # CNN 인풋용 리사이즈 픽셀크기
         self.PIXEL = hp.pixel
-        # 훈련 반복 수
-        self.NUM_EPISODES = hp.num_episodes
-        # 미니 배치 훈련에 사용할 과거 경험 개수
-        self.BATCH_SIZE = hp.batch_size
-        # 우선도 버퍼에서 꺼내는 비율 (초기값, 0.2까지 줄어들도록 설계)
-        self.P_RATIO = hp.p_ratio
-        # 우선도 버퍼 크기
-        self.P_BUFFER_SIZE = hp.p_buffer_size
-        # 우선도 버퍼 크기
-        self.N_BUFFER_SIZE = hp.n_buffer_size
-        # 우선도 버퍼 크기
+        self.REWARDS = hp.rewards
         self.FPS = hp.fps
-        # 엡실론 최소값
-        self.EPSILON_MIN = hp.epsilon_min
-        # 엡실론 감소율
-        self.EPSILON_DECAY = hp.epsilon_decay
-        # 타겟 네트워크 업데이트 주기
-        self.UPDATE_FREQ = hp.update_freq
-        # 타겟 네트워크 소프트 업데이트 비율
-        self.TAU = hp.tau
-        # 학습률
-        self.LEARNING_RATE = hp.learning_rate
-        # 미래가치 할인율
-        self.GAMMA = hp.gamma
         self.LOGGING = not hp.without_log
+        self.NUM_EPISODES = 50
+        self.model_name = model_name
+
         print(f'[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}')
 
         # 디바이스 설정
@@ -118,7 +75,7 @@ class TestAgent:
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
         self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(self.device)  # 학습자의 두뇌
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
-        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING)
+        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING, rewards=self.REWARDS)
         # 환경 함수 캐싱
         self._restart_game = self.env.restart_game
         self._step = self.env.step
@@ -128,7 +85,7 @@ class TestAgent:
 
         # 학습 이어하기(모델 저장 파일 로드)
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
+        # self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
         self.model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
         self.xprint(f"{self.model_name} 모델 사용,", end=" ")
         if os.path.exists(self.model_path):
@@ -264,5 +221,5 @@ if __name__ == "__main__":
     custom_kwargs = {k: v for k, v in vars(args).items() if v is not None}
 
     hp = HyperParameters(**custom_kwargs)
-    test_agent = TestAgent(hp=hp)
+    test_agent = TestAgent(hp=hp, model_name="best_model_DUELING_HYBRID_CANNY_HARD", logging=True)
     test_agent.run_test()

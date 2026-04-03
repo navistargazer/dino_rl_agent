@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def train_buffer(model, target_model, optimizer, batch, device, push_to_priority, dqn_ver=3, gamma=0.99):
+def train_buffer(model, target_model, optimizer, batch, device, buffer_type, push_to_priority, dqn_ver=3, gamma=0.99):
     """
     미니 배치 훈련 : 기억 버퍼(우선도/노멀)에서 랜덤 추출한 경험을 미분/역전파/최적화
     """
@@ -98,14 +98,15 @@ def train_buffer(model, target_model, optimizer, batch, device, push_to_priority
     optimizer.step()
 
     # 하이브리드 듀얼 버퍼 : TD-error가 큰 기억은 우선도 버퍼에 밀어넣기
-    # 오차의 절대값을 계산->토치 기울기 계산에서 분리->평탄화->cpu 램으로->넘파이배열
-    td_errors = torch.abs(acted_q - target_q).detach().squeeze().cpu().numpy()
-    # 오차 크기 상위 10% 정도를 기준점으로 삼음
-    threshold = np.percentile(td_errors, 90)
-    # 배치의 기억 중 기준이상의 TD-error값을 가진 기억을 우선도 버퍼로
-    for i in range(len(batch)):
-        if td_errors[i] >= threshold:
-            push_to_priority(batch[i])
+    if buffer_type == 2:
+        # 오차의 절대값을 계산->토치 기울기 계산에서 분리->평탄화->cpu 램으로->넘파이배열
+        td_errors = torch.abs(acted_q - target_q).detach().squeeze().cpu().numpy()
+        # 오차 크기 상위 10% 정도를 기준점으로 삼음
+        threshold = np.percentile(td_errors, 90)
+        # 배치의 기억 중 기준이상의 TD-error값을 가진 기억을 우선도 버퍼로
+        for i in range(len(batch)):
+            if td_errors[i] >= threshold:
+                push_to_priority(batch[i])
 
 
 

@@ -51,7 +51,7 @@ class HyperParameters:
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
     # 행동 보상 (사망, 대기, 점프, 숙이기)
-    rewards:(float, float, float, float) = (-10, 0.1, 0.05, 0.08)
+    rewards:tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
     # 훈련 반복 수
     num_episodes: int = 1500
     # 미니 배치 훈련에 사용할 과거 경험 개수
@@ -358,7 +358,7 @@ class TrainAgent:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     train_buffer(
-                        self.model, self.target_model, self.optimizer, batch, self.device, _push_to_priority, self.DQN_Type, self.GAMMA
+                        self.model, self.target_model, self.optimizer, batch, self.device, self.BUFFER_TYPE, _push_to_priority, self.DQN_Type, self.GAMMA
                     )
                     # 타겟 네트워크 소프트 업데이트
                     if self.TARGET_UPDATE == TargetUpdate.SOFT:
