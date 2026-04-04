@@ -17,6 +17,7 @@ from utils import draw_plots
 from dataclasses import dataclass
 from enum import IntEnum
 
+
 # 하이퍼 파라미터 열겨형 정의
 class DQNType(IntEnum):
     VANILLA = 0
@@ -24,23 +25,27 @@ class DQNType(IntEnum):
     DOUBLE = 2
     DUELING = 3
 
+
 class ImgProcess(IntEnum):
     NONE = 0
     CANNY = 1
     DIFF = 2
+
 
 class BufferType(IntEnum):
     SINGLE = 0
     DUAL = 1
     HYBRID = 2
 
+
 class TargetUpdate(IntEnum):
     HARD = 0
     SOFT = 1
 
+
 @dataclass
 class HyperParameters:
-    # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
+    # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )
     dqn_type: DQNType = DQNType.DUELING
     # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
     img_process: ImgProcess = ImgProcess.CANNY
@@ -51,7 +56,7 @@ class HyperParameters:
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
     # 행동 보상 (사망, 대기, 점프, 숙이기)
-    rewards:tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
+    rewards: tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
     # 훈련 반복 수
     num_episodes: int = 1500
     # 미니 배치 훈련에 사용할 과거 경험 개수
@@ -63,7 +68,7 @@ class HyperParameters:
     # 노멀 버퍼 크기
     n_buffer_size: int = 100000
     # 초당 프레임 수
-    fps: int = 10
+    fps: int = 15
     # 엡실론(랜덤 탐험 비율) 최소값
     epsilon_min: float = 0.05
     # 에피소드 당 엡실론 감소율
@@ -78,6 +83,7 @@ class HyperParameters:
     gamma: float = 0.99
     # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
+
     # 들어온 값을 enum 오브젝트로 캐스팅
     def __post_init__(self):
         self.dqn_type = DQNType(self.dqn_type)
@@ -107,9 +113,11 @@ class TrainAgent:
         self.LEARNING_RATE = hp.learning_rate
         self.GAMMA = hp.gamma
         self.LOGGING = not hp.without_log
-        
+
         # 하이퍼 파라미터 출력
-        print(f'[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 대기, 점프, 숙이기]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}')
+        print(
+            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 대기, 점프, 숙이기]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
+        )
 
         # 디바이스 설정
         if torch.cuda.is_available():
@@ -125,24 +133,34 @@ class TrainAgent:
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
-        self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(self.device)  # 학습자의 두뇌
+        self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
+            self.device
+        )  # 학습자의 두뇌
         # target model - nature DQN부터 타겟 네트워크 가동
-        self.target_model = CNN(num_actions=3, input_pixel=self.PIXEL).to(self.device)  # 목표 신경망
+        self.target_model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
+            self.device
+        )  # 목표 신경망
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
-        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING, rewards=self.REWARDS)
+        self.env = Environment(
+            self.IMG_PROCESS_TYPE,
+            self.PIXEL,
+            logging=self.LOGGING,
+            rewards=self.REWARDS,
+        )
         # 환경 함수 캐싱
         self._restart_game = self.env.restart_game
         self._step = self.env.step
-        
-        
+
         self.frame_time = 1.0 / self.FPS
-        
+
         # 기억 저장용 버퍼
         self.replaybuffer = ReplayBuffer(
-            priority_cap=self.P_BUFFER_SIZE, normal_cap=self.N_BUFFER_SIZE, priority_ratio=self.P_RATIO
+            priority_cap=self.P_BUFFER_SIZE,
+            normal_cap=self.N_BUFFER_SIZE,
+            priority_ratio=self.P_RATIO,
         )
-        
+
         # 이어서 학습할 경우를 위한 변수
         self.best_score = 0
         self.epsilon = 1.0
@@ -165,7 +183,7 @@ class TrainAgent:
             self.best_score = 0
             self.epsilon = 1.0
             self.xprint("새로운 학습 시작")
-        
+
         # 그래프 저장 경로
         plot_dir = os.path.join(self.BASE_DIR, "plots")
         os.makedirs(plot_dir, exist_ok=True)
@@ -186,10 +204,10 @@ class TrainAgent:
         self.history_survived = []
 
     def validate_model(self, num_test=5):
-        '''
+        """
         훈련 도중 엡실론을 제거한 진짜 실력을 검증하고 베스트 모델을 저장
         epsilon = 0, 버퍼 저장 및 배치 훈련 안함
-        ''' 
+        """
         # 모델 평가 모드로 전환
         self.model.eval()
         # 생존 시간 기록
@@ -213,8 +231,13 @@ class TrainAgent:
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     img, tick = state
                     # img_tensor = img.to(self.device).float() / 255.0
-                    img_tensor = torch.from_numpy(img).unsqueeze(0).to(self.device).float() / 255.0
-                    tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
+                    img_tensor = (
+                        torch.from_numpy(img).unsqueeze(0).to(self.device).float()
+                        / 255.0
+                    )
+                    tick_tensor = torch.tensor(
+                        tick, dtype=torch.float32, device=self.device
+                    ).view(1, 1)
                     state = (img_tensor, tick_tensor)
                     q_values = self.model(state)
                     act_idx = _argmax(q_values).item()
@@ -223,7 +246,7 @@ class TrainAgent:
                         max_q = _max(q_values).item()
                     if epi_frame_cnt % 10 == 0:
                         self.xprint("#", end="", flush=True)
-                    
+
                     # 2. 다음 상태로 진행
                     next_state, reward, done = self._step(act_idx)
                     # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
@@ -231,7 +254,9 @@ class TrainAgent:
                     if interval < self.frame_time:
                         time.sleep(self.frame_time - interval)
                     elif interval > self.frame_time + 0.01:
-                        self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
+                        self.xprint(
+                            f"frame delayed: {interval - self.frame_time:.3f}sec"
+                        )
                     reward_sum += reward
                     state = next_state
 
@@ -245,7 +270,7 @@ class TrainAgent:
                     f"\nTest:{i}/{num_test} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
                 )
                 survival_record.append(survival_time)
-        
+
         # 모델 훈련 모드로 복귀
         self.model.train()
         # # 그래프 저장
@@ -257,12 +282,12 @@ class TrainAgent:
         if best_score > self.best_score:
             self.best_score = best_score
             checkpoint = {
-                        "model_state_dict": self.model.state_dict(),
-                        "best_score": self.best_score,
-                        "epsilon": self.epsilon,
+                "model_state_dict": self.model.state_dict(),
+                "best_score": self.best_score,
+                "epsilon": self.epsilon,
             }
             torch.save(checkpoint, self.model_path)
-            self.xprint(f'{best_score:.3f}로 베스트 모델이 갱신되었습니다.')
+            self.xprint(f"{best_score:.3f}로 베스트 모델이 갱신되었습니다.")
         else:
             self.xprint("모델 갱신 실패")
 
@@ -309,7 +334,7 @@ class TrainAgent:
             is_epsilon_act = False
             # 단일 에피소드 시작
             while not done:
-                start = time.time()
+                frame_start = time.time()
                 epi_frame_cnt += 1
                 frame_since_update += 1
                 # 1. 행동 결정 (뇌를 거치거나 or 무작위 탐험)
@@ -321,15 +346,24 @@ class TrainAgent:
                     # state의 이미지 스택과 시간틱을 언패킹해서 텐서로 변환 후 gpu로
                     img, tick = state
                     # img_tensor = img.to(self.device).float() / 255.0
-                    img_tensor = torch.from_numpy(img).unsqueeze(0).to(self.device).float() / 255.0
-                    tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
+                    img_tensor = (
+                        torch.from_numpy(img).unsqueeze(0).to(self.device).float()
+                        / 255.0
+                    )
+                    tick_tensor = torch.tensor(
+                        tick, dtype=torch.float32, device=self.device
+                    ).view(1, 1)
                     state_tensor = (img_tensor, tick_tensor)
 
                     if self.DQN_Type == DQNType.DUELING:
-                        q_values, val, adv = self.model(state_tensor, return_dueling=True)
+                        q_values, val, adv = self.model(
+                            state_tensor, return_dueling=True
+                        )
                         avg_value = val.mean().item()
                         sum_value += avg_value
-                        avg_advantage = (adv.max(dim=1)[0] - adv.min(dim=1)[0]).mean().item()
+                        avg_advantage = (
+                            (adv.max(dim=1)[0] - adv.min(dim=1)[0]).mean().item()
+                        )
                         sum_advantage += avg_advantage
                     else:
                         q_values = self.model(state_tensor)
@@ -337,11 +371,13 @@ class TrainAgent:
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:
                         is_epsilon_act = True
-                        act_idx = _randint(3)                # 랜덤(0:대기, 1:점프, 2:숙이기)
+                        act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
                     else:
                         is_epsilon_act = False
-                        act_idx = _argmax(q_values).item()   # 최대 가지를 가진 행동의 인덱스를 선택
-                    
+                        act_idx = _argmax(
+                            q_values
+                        ).item()  # 최대 가지를 가진 행동의 인덱스를 선택
+
                     # # 에피소드 시작 시 최대 Q값을 시각화
                     # if epi_frame_cnt == 1:
                     #     max_q = _max(q_values).item()
@@ -358,7 +394,15 @@ class TrainAgent:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     train_buffer(
-                        self.model, self.target_model, self.optimizer, batch, self.device, self.BUFFER_TYPE, _push_to_priority, self.DQN_Type, self.GAMMA
+                        self.model,
+                        self.target_model,
+                        self.optimizer,
+                        batch,
+                        self.device,
+                        self.BUFFER_TYPE,
+                        _push_to_priority,
+                        self.DQN_Type,
+                        self.GAMMA,
                     )
                     # 타겟 네트워크 소프트 업데이트
                     if self.TARGET_UPDATE == TargetUpdate.SOFT:
@@ -367,11 +411,11 @@ class TrainAgent:
                             self.target_model.parameters(), self.model.parameters()
                         ):
                             target_param.data.copy_(
-                                self.TAU * online_param.data + (1.0 - self.TAU) * target_param.data
+                                self.TAU * online_param.data
+                                + (1.0 - self.TAU) * target_param.data
                             )
-
                 # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
-                interval = time.time() - start
+                interval = time.time() - frame_start - 0.01
                 if interval < self.frame_time:
                     time.sleep(self.frame_time - interval)
                 elif interval > self.frame_time:
@@ -424,7 +468,9 @@ class TrainAgent:
                     param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
                 self.xprint(f"학습률 감소 : {self.optimizer.param_groups[0]['lr']:.7f}")
             elif (episode > half_episode) and (survival_time > self.best_score * 1.2):
-                self.xprint(f"{episode + 1}에피소드에서 기존 기록 20% 이상 갱신, 모델 테스트 5회 진행 중")
+                self.xprint(
+                    f"{episode + 1}에피소드에서 기존 기록 20% 이상 갱신, 모델 테스트 5회 진행 중"
+                )
                 self.validate_model(num_test=5)
 
             # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
@@ -436,14 +482,16 @@ class TrainAgent:
             _add_scalar("Brain/Max Q-Value", max_q, episode)
             if self.DQN_Type == DQNType.DUELING:
                 _add_scalar("Brain/Average Value", sum_value / epi_frame_cnt, episode)
-                _add_scalar("Brain/Average Advantage", sum_advantage / epi_frame_cnt, episode)
+                _add_scalar(
+                    "Brain/Average Advantage", sum_advantage / epi_frame_cnt, episode
+                )
             self.writer.flush()
             # 그래프 저장
             draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 훈련 종료
         self.writer.close()
-    
+
     def xprint(self, text, end="\n", flush=False):
         if self.LOGGING:
             print(text, end=end, flush=flush)
@@ -451,20 +499,43 @@ class TrainAgent:
 
 if __name__ == "__main__":
     import argparse
+
     # 1. 인자 parser 생성
     parser = argparse.ArgumentParser(description="Chrome Dino RL Agent")
 
     # 2. 실행 시 받을 옵션 정의
-    parser.add_argument("--dqn_type", type=int, choices=[0, 1, 2, 3], help="DQN 타입(0:Vanilla, 1:Nature, 2:Double, 3:Dueling)")
-    parser.add_argument("--img_process", type=int, choices=[0, 1, 2], help="이미지 전처리 방식(0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))")
-    parser.add_argument("--buffer_type", type=int, choices=[0, 1, 2], help="경험 기억용 버퍼 타입(0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)")
-    parser.add_argument("--target_update", type=int, choices=[0, 1], help="타겟 네트워크 업데이트 타입(0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)")
+    parser.add_argument(
+        "--dqn_type",
+        type=int,
+        choices=[0, 1, 2, 3],
+        help="DQN 타입(0:Vanilla, 1:Nature, 2:Double, 3:Dueling)",
+    )
+    parser.add_argument(
+        "--img_process",
+        type=int,
+        choices=[0, 1, 2],
+        help="이미지 전처리 방식(0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))",
+    )
+    parser.add_argument(
+        "--buffer_type",
+        type=int,
+        choices=[0, 1, 2],
+        help="경험 기억용 버퍼 타입(0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)",
+    )
+    parser.add_argument(
+        "--target_update",
+        type=int,
+        choices=[0, 1],
+        help="타겟 네트워크 업데이트 타입(0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)",
+    )
     parser.add_argument("--num_episodes", type=int, help="훈련 반복 수")
-    parser.add_argument("--without_log", action="store_true", help="로그 및 이미지 출력 여부")
-    
+    parser.add_argument(
+        "--without_log", action="store_true", help="로그 및 이미지 출력 여부"
+    )
+
     # 3. 입력값 파싱
     args = parser.parse_args()
-    
+
     # 4. 입력받은 옵션을 dictionary에 담기
     custom_kwargs = {k: v for k, v in vars(args).items() if v is not None}
     # 5. 하이퍼 파라미터 객체 생성

@@ -21,25 +21,30 @@ class DQNType(IntEnum):
     DOUBLE = 2
     DUELING = 3
 
+
 class ImgProcess(IntEnum):
     NONE = 0
     CANNY = 1
     DIFF = 2
 
+
 @dataclass
 class HyperParameters:
-    # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )        
+    # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )
     dqn_type: DQNType = DQNType.DUELING
     # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
     img_process: ImgProcess = ImgProcess.CANNY
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
     # 행동 보상 (사망, 대기, 점프, 숙이기)
-    rewards:tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
+    rewards: tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
     # 초당 프레임 수
     fps: int = 10
     # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
+    # 반복 수
+    num_episodes: int = 50
+
     # 들어온 값을 enum 오브젝트로 캐스팅
     def __post_init__(self):
         self.dqn_type = DQNType(self.dqn_type)
@@ -47,17 +52,21 @@ class HyperParameters:
 
 
 class TestAgent:
-    def __init__(self, hp: HyperParameters = HyperParameters(), model_name, logging=True):
+    def __init__(
+        self, hp: HyperParameters = HyperParameters(), model_name="None", logging=True
+    ):
         self.DQN_Type = hp.dqn_type
         self.IMG_PROCESS_TYPE = hp.img_process
         self.PIXEL = hp.pixel
         self.REWARDS = hp.rewards
         self.FPS = hp.fps
         self.LOGGING = not hp.without_log
-        self.NUM_EPISODES = 50
+        self.NUM_EPISODES = hp.num_episodes
         self.model_name = model_name
 
-        print(f'[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}')
+        # print(
+        #     f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
+        # )
 
         # 디바이스 설정
         if torch.cuda.is_available():
@@ -69,18 +78,24 @@ class TestAgent:
         self.xprint(f"사용 디바이스: {self.device}")
 
         # 강화학습에서는 pytorch의 과도한 멀티스레드에 의한 cpu오버헤드 방지
-        torch.set_num_threads(1)
+        # torch.set_num_threads(1)
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
-        self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(self.device)  # 학습자의 두뇌
+        self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
+            self.device
+        )  # 학습자의 두뇌
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
-        self.env = Environment(self.IMG_PROCESS_TYPE, self.PIXEL, logging=self.LOGGING, rewards=self.REWARDS)
+        self.env = Environment(
+            self.IMG_PROCESS_TYPE,
+            self.PIXEL,
+            logging=self.LOGGING,
+            rewards=self.REWARDS,
+        )
         # 환경 함수 캐싱
         self._restart_game = self.env.restart_game
         self._step = self.env.step
-        
-        
+
         self.frame_time = 1.0 / self.FPS
 
         # 학습 이어하기(모델 저장 파일 로드)
@@ -93,13 +108,9 @@ class TestAgent:
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.best_score = checkpoint["best_score"]
             self.epsilon = checkpoint["epsilon"]
-            self.xprint(
-                f"모델 로드 완료: {self.model_name}"
-            )
+            self.xprint(f"모델 로드 완료: {self.model_name}")
         else:
-            self.xprint(
-                f"[경고] {self.model_path} 파일이 없습니다."
-            )
+            self.xprint(f"[경고] {self.model_path} 파일이 없습니다.")
 
         # 평가 모드 설정
         self.model.eval()
@@ -125,8 +136,13 @@ class TestAgent:
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     img, tick = state
                     # img_tensor = img.to(self.device).float() / 255.0
-                    img_tensor = torch.from_numpy(img).unsqueeze(0).to(self.device).float() / 255.0
-                    tick_tensor = torch.tensor(tick, dtype=torch.float32, device=self.device).view(1, 1)
+                    img_tensor = (
+                        torch.from_numpy(img).unsqueeze(0).to(self.device).float()
+                        / 255.0
+                    )
+                    tick_tensor = torch.tensor(
+                        tick, dtype=torch.float32, device=self.device
+                    ).view(1, 1)
                     state = (img_tensor, tick_tensor)
                     q_values = self.model(state)
                     act_idx = _argmax(q_values).item()
@@ -138,7 +154,9 @@ class TestAgent:
                     if interval < self.frame_time:
                         time.sleep(self.frame_time - interval)
                     elif interval > self.frame_time + 0.01:
-                        self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
+                        self.xprint(
+                            f"frame delayed: {interval - self.frame_time:.3f}sec"
+                        )
                     state = next_state
 
                 survival_time = time.time() - epi_start_time
@@ -221,5 +239,7 @@ if __name__ == "__main__":
     custom_kwargs = {k: v for k, v in vars(args).items() if v is not None}
 
     hp = HyperParameters(**custom_kwargs)
-    test_agent = TestAgent(hp=hp, model_name="best_model_DUELING_HYBRID_CANNY_HARD", logging=True)
+    test_agent = TestAgent(
+        hp=hp, model_name="best_model_DUELING_HYBRID_CANNY_HARD", logging=True
+    )
     test_agent.run_test()

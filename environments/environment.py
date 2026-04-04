@@ -1,14 +1,17 @@
 from .vision import Vision
 from .action import Action
+from .selenium_action import SeleniumAction
 import time
 import platform
 
 
 class Environment:
-    def __init__(self, img_process_type=1, pixel=64, logging=True, rewards=(-10, 0.1, 0.05, 0.08)):
+    def __init__(
+        self, img_process_type=1, pixel=64, logging=True, rewards=(-10, 0.1, 0.05, 0.08)
+    ):
         self.is_not_mac = platform.system() != "Darwin"
+        self.action = SeleniumAction()
         self.vision = Vision(img_process_type, pixel, logging=logging)
-        self.action = Action()
         self.reward_done, self.reward_wait, self.reward_jump, self.reward_duck = rewards
         self.tick = 0
         self.state = self.vision.get_next_state(isfirst=True)
@@ -54,7 +57,6 @@ class Environment:
         else:
             self.reward = self.reward_duck
             self.action.duck()
-
         # chrome 렌더링 대기 시간
         if self.is_not_mac:
             time.sleep(0.0167)
@@ -62,7 +64,7 @@ class Environment:
         # 행동 이후 상태
         self.state = self.vision.get_next_state()
         # 상태에 시간 변수를 추가(노멀라이즈 개념으로 작은 값을 더해줌)
-        self.tick += 5e-4
+        self.tick += 1e-4
         state = (self.state, self.tick)
 
         # 사망 보상 설정
@@ -70,5 +72,3 @@ class Environment:
             self.reward = self.reward_done
 
         return state, self.reward, self.is_game_over
-
-
