@@ -7,15 +7,14 @@ import platform
 
 class Environment:
     def __init__(
-        self, img_process_type=1, pixel=64, logging=True, rewards=(-10, 0.1, 0.05, 0.08)
+        self, img_process_type=1, pixel=64, logging=True, rewards=(-1, 0.01)
     ):
         self.is_not_mac = platform.system() != "Darwin"
         self.action = SeleniumAction()
         self.vision = Vision(img_process_type, pixel, logging=logging)
-        self.reward_done, self.reward_wait, self.reward_jump, self.reward_duck = rewards
+        self.reward_done, self.reward_alive = rewards
         self.tick = 0
         self.state = self.vision.get_next_state(isfirst=True)
-        self.reward = 0
         self.coord = (self.vision.monitor["left"] + 400, self.vision.monitor["top"])
 
     @property
@@ -24,12 +23,10 @@ class Environment:
 
     def restart_game(self):
         self.tick = 0
-        # self.action.click(self.coord)
+        self.action.jump()
         while self.is_game_over:
             self.action.jump()
             time.sleep(0.0167)
-            # if self.is_not_mac:
-            #     time.sleep(0.02)
             self.action.wait()
             self.vision.grab_monitor()
 
@@ -38,21 +35,20 @@ class Environment:
             self.action.click(self.coord)
             time.sleep(0.2)
         state = (self.state, self.tick)
-        self.reward = 0
         return state, self.is_game_over
 
     def step(self, action):
+        reward = self.reward_alive
         # action = 0(아무것도 안함)이라면 1프레임 기다림
         if action == 0:
-            self.reward = self.reward_wait
             self.action.wait()
         # action = 1(점프)라면 점프의 체공시간만큼 기다림
         elif action == 1:
-            self.reward = self.reward_jump
+            # reward *= 0.5
             self.action.jump()
         # action = 2(숙이기)라면 짧은 시간 기다림
         else:
-            self.reward = self.reward_duck
+            # reward *= 0.8
             self.action.duck()
         # chrome 렌더링 대기 시간
         if self.is_not_mac:
@@ -66,6 +62,6 @@ class Environment:
 
         # 사망 보상 설정
         if self.is_game_over:
-            self.reward = self.reward_done
+            reward = self.reward_done
 
-        return state, self.reward, self.is_game_over
+        return state, reward, self.is_game_over

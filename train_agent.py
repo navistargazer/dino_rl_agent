@@ -55,8 +55,8 @@ class HyperParameters:
     target_update: TargetUpdate = TargetUpdate.HARD
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
-    # 행동 보상 (사망, 대기, 점프, 숙이기)
-    rewards: tuple[float, float, float, float] = (-1, 0.01, 0.005, 0.008)
+    # 행동 보상 (사망, 대기)
+    rewards: tuple[float, float] = (-1, 0.01)
     # 훈련 반복 수
     num_episodes: int = 1500
     # 미니 배치 훈련에 사용할 과거 경험 개수
@@ -116,7 +116,7 @@ class TrainAgent:
 
         # 하이퍼 파라미터 출력
         print(
-            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 대기, 점프, 숙이기]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
+            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 생존]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
         )
 
         # 디바이스 설정
@@ -167,14 +167,14 @@ class TrainAgent:
 
         # 학습 이어하기(모델 저장 파일 로드)
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
+        self.model_name = f"{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
         self.model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
         self.xprint(f"{self.model_name} 모델 사용,", end=" ")
         if os.path.exists(self.model_path):
             checkpoint = torch.load(self.model_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.best_score = checkpoint["best_score"]
-            self.epsilon = checkpoint["epsilon"]
+            self.epsilon = max(checkpoint["epsilon"], 0.5)
             self.xprint(
                 f"이어서 학습 시작 (기존 최고 생존: {self.best_score} / Epsilon: {self.epsilon:.3f})"
             )
@@ -187,11 +187,11 @@ class TrainAgent:
         # 그래프 저장 경로
         plot_dir = os.path.join(self.BASE_DIR, "plots")
         os.makedirs(plot_dir, exist_ok=True)
-        self.plot_path = os.path.join(plot_dir, f"{self.model_name}_plot.png")
+        self.plot_path = os.path.join(plot_dir, f"{self.model_name}.png")
         # tensorboard 로그 경로
         log_dir = os.path.join(self.BASE_DIR, "runs")
         os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f"{self.model_name}_log")
+        log_path = os.path.join(log_dir, f"{self.model_name}")
         self.writer = SummaryWriter(log_path)  # run/self.model_name 폴더에 로그가 쌓임
         # dqn 버전이 올라가면 타겟 모델 등장
         if self.DQN_Type > 0:
@@ -223,11 +223,9 @@ class TrainAgent:
                 state, done = self._restart_game()
                 epi_start_time = time.time()
                 reward_sum = 0.0
-                epi_frame_cnt = 0
                 # 단일 에피소드 시작
                 while not done:
                     start = time.time()
-                    epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     img, tick = state
                     # img_tensor = img.to(self.device).float() / 255.0
@@ -242,21 +240,18 @@ class TrainAgent:
                     q_values = self.model(state)
                     act_idx = _argmax(q_values).item()
 
-                    if epi_frame_cnt == 1:
-                        max_q = _max(q_values).item()
-                    if epi_frame_cnt % 10 == 0:
-                        self.xprint("#", end="", flush=True)
-
                     # 2. 다음 상태로 진행
                     next_state, reward, done = self._step(act_idx)
                     # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
                     interval = time.time() - start
                     if interval < self.frame_time:
                         time.sleep(self.frame_time - interval)
-                    elif interval > self.frame_time + 0.01:
+                    elif interval > self.frame_time * 3:
                         self.xprint(
                             f"frame delayed: {interval - self.frame_time:.3f}sec"
                         )
+                    if done:
+                        max_q = _max(q_values).item()
                     reward_sum += reward
                     state = next_state
 
@@ -267,7 +262,7 @@ class TrainAgent:
                 # self.history_survived.append(survival_time)
                 # 결과 출력
                 self.xprint(
-                    f"\nTest:{i}/{num_test} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
+                    f"Test:{i+1}/{num_test} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
                 )
                 survival_record.append(survival_time)
 
@@ -277,7 +272,7 @@ class TrainAgent:
         # draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 최대 생존 시간
-        best_score = np.median(survival_record).item()
+        best_score = np.mean(survival_record).item()
         # 베스트 모델 저장
         if best_score > self.best_score:
             self.best_score = best_score
@@ -331,7 +326,6 @@ class TrainAgent:
             # d3qn 시각화 준비
             if self.DQN_Type == DQNType.DUELING:
                 sum_value, sum_advantage = 0.0, 0.0
-            is_epsilon_act = False
             # 단일 에피소드 시작
             while not done:
                 frame_start = time.time()
@@ -370,10 +364,10 @@ class TrainAgent:
 
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:
-                        is_epsilon_act = True
                         act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
+                        if self.epsilon == self.EPSILON_MIN:
+                            self.xprint(f"epsilon_action : {act_idx}")
                     else:
-                        is_epsilon_act = False
                         act_idx = _argmax(
                             q_values
                         ).item()  # 최대 가지를 가진 행동의 인덱스를 선택
@@ -384,6 +378,8 @@ class TrainAgent:
 
                 # 2. 1스텝 진행(다음 상태 확인)
                 next_state, reward, done = self._step(act_idx)
+                if done:
+                    max_q = _max(q_values).item()
 
                 # 3. 경험 저장 (방금 겪은 일을 메모리에 저장, 우선도/노멀 듀얼버퍼)
                 _push((state, act_idx, reward, next_state, done), self.BUFFER_TYPE)
@@ -422,9 +418,6 @@ class TrainAgent:
                     self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
 
                 # 7. 다음 상태를 저장(기억 버퍼에 현재 상태로 전달되는 임시 변수 역할)
-                if done:
-                    max_q = _max(q_values).item()
-
                 state = next_state
                 reward_sum += reward
             # 렉걸릴 때는 그냥 넘김
@@ -452,7 +445,7 @@ class TrainAgent:
                     episode_since_update = 0
             # 결과 출력
             self.xprint(
-                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f} | Died by Epsilon:{is_epsilon_act}"
+                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
             )
 
             # 베스트 모델 저장 & 학습률 감소

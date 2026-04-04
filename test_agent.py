@@ -36,8 +36,8 @@ class HyperParameters:
     img_process: ImgProcess = ImgProcess.CANNY
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
-    # 행동 보상 (사망, 대기, 점프, 숙이기)
-    rewards: tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
+    # 행동 보상 (사망, 대기)
+    rewards: tuple[float, float] = (-1, 0.01)
     # 초당 프레임 수
     fps: int = 10
     # 로그 및 확인 이미지 출력 여부
@@ -108,31 +108,32 @@ class TestAgent:
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.best_score = checkpoint["best_score"]
             self.epsilon = checkpoint["epsilon"]
-            self.xprint(f"모델 로드 완료: {self.model_name}")
+            self.xprint("모델 로드 완료")
         else:
             self.xprint(f"[경고] {self.model_path} 파일이 없습니다.")
 
-        # 평가 모드 설정
-        self.model.eval()
 
     def run_test(self):
         self.xprint(
             f"\n{self.NUM_EPISODES} 에피소드 동안 순수 모델 성능 테스트를 시작합니다."
         )
 
+        # 평가 모드 설정
+        self.model.eval()
         survival_records = []
         _argmax = torch.argmax
+        _max = torch.max
 
         # 미분 및 기울기 계산 무시 (역전파 방지)
+        # 미분 없이 에피소드 루프
         with torch.no_grad():
-            for episode in range(self.NUM_EPISODES):
+            for i in range(self.NUM_EPISODES):
                 state, done = self._restart_game()
                 epi_start_time = time.time()
-                epi_frame_cnt = 0
-
+                reward_sum = 0.0
+                # 단일 에피소드 시작
                 while not done:
                     start = time.time()
-                    epi_frame_cnt += 1
                     # 1. 도델의 최대 Q 값에 의한 행동 결정
                     img, tick = state
                     # img_tensor = img.to(self.device).float() / 255.0
@@ -153,16 +154,23 @@ class TestAgent:
                     interval = time.time() - start
                     if interval < self.frame_time:
                         time.sleep(self.frame_time - interval)
-                    elif interval > self.frame_time + 0.01:
+                    elif interval > self.frame_time * 3:
                         self.xprint(
                             f"frame delayed: {interval - self.frame_time:.3f}sec"
                         )
+                    if done:
+                        max_q = _max(q_values).item()
+                    reward_sum += reward
                     state = next_state
 
+                # 에피소드 종료 생존시간
                 survival_time = time.time() - epi_start_time
-                survival_records.append(survival_time)
+                # # 기록
+                # self.history_q_values.append(max_q)
+                # self.history_survived.append(survival_time)
+                # 결과 출력
                 self.xprint(
-                    f"\nEpisode {episode + 1}/{self.NUM_EPISODES} | Survived {survival_time:.3f} sec"
+                    f"Test:{i+1}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
                 )
 
         # 통계 계산
@@ -240,6 +248,6 @@ if __name__ == "__main__":
 
     hp = HyperParameters(**custom_kwargs)
     test_agent = TestAgent(
-        hp=hp, model_name="best_model_DUELING_HYBRID_CANNY_HARD", logging=True
+        hp=hp, model_name="DUELING_HYBRID_CANNY_HARD", logging=True
     )
     test_agent.run_test()
