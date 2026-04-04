@@ -8,6 +8,7 @@ class SeleniumAction:
     def __init__(self):
         options = webdriver.ChromeOptions()
         options.add_argument("--disable-infobars")
+        options.add_argument("--window-position=0,0")
         options.add_argument("--window-size=800,600")
 
         # 크롬의 모든 SSL/인증서 보안 경고창을 강제로 무시합니다.
@@ -100,11 +101,6 @@ class SeleniumAction:
             # pag.keyDown('down')
             self.inject_key("keyDown", 40)
             self.current_key = 40
-
-    def release_all(self):
-        if self.current_key:
-            # pag.keyUp(self.current_key)
-            self.current_key = None
 
     def click(self, coord):
         # pag.click(coord)

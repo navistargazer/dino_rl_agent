@@ -56,7 +56,7 @@ class HyperParameters:
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
     # 행동 보상 (사망, 대기, 점프, 숙이기)
-    rewards: tuple[float, float, float, float] = (-10, 0.1, 0.05, 0.08)
+    rewards: tuple[float, float, float, float] = (-1, 0.01, 0.005, 0.008)
     # 훈련 반복 수
     num_episodes: int = 1500
     # 미니 배치 훈련에 사용할 과거 경험 개수
@@ -415,13 +415,16 @@ class TrainAgent:
                                 + (1.0 - self.TAU) * target_param.data
                             )
                 # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
-                interval = time.time() - frame_start - 0.01
+                interval = time.time() - frame_start
                 if interval < self.frame_time:
                     time.sleep(self.frame_time - interval)
-                elif interval > self.frame_time:
+                elif interval > self.frame_time * 3:
                     self.xprint(f"frame delayed: {interval - self.frame_time:.3f}sec")
 
                 # 7. 다음 상태를 저장(기억 버퍼에 현재 상태로 전달되는 임시 변수 역할)
+                if done:
+                    max_q = _max(q_values).item()
+
                 state = next_state
                 reward_sum += reward
             # 렉걸릴 때는 그냥 넘김
@@ -429,7 +432,6 @@ class TrainAgent:
                 print("#", end="", flush=True)
                 time.sleep(0.0167)
                 continue
-            max_q = _max(q_values).item()
 
             # 에피소드 종료 생존시간
             survival_time = time.time() - epi_start_time
@@ -450,7 +452,7 @@ class TrainAgent:
                     episode_since_update = 0
             # 결과 출력
             self.xprint(
-                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f} | Died by Epsilon:{is_epsilon_act}"
+                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f} | Died by Epsilon:{is_epsilon_act}"
             )
 
             # 베스트 모델 저장 & 학습률 감소

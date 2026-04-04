@@ -118,9 +118,9 @@ class Vision:
 
         # 6. 타겟 게임 영역 좌표 산출
         OFFSET_X = 40
-        OFFSET_Y = -55
-        GAME_WIDTH = 360
-        GAME_HEIGHT = 90
+        OFFSET_Y = -50
+        GAME_WIDTH = 320
+        GAME_HEIGHT = 80
 
         monitor_settings = {
             "top": logic_y + OFFSET_Y,
@@ -160,9 +160,12 @@ class Vision:
 
         # 맥과 윈도우의 픽셀 밀림을 영역으로 판단함으로써 해결
         bg_pixel = gray[0, 100]
-        gameover = gray[0:3, 200:205].astype(np.int16)
+        gameover = gray[0:3, 145:150].astype(np.int16)
         diff_area = np.abs(gameover - bg_pixel)
-        self.gameover_detected = np.max(diff_area) > 100
+        if np.max(diff_area) > 100:
+            self.gameover_detected = True
+        else:
+            self.gameover_detected = False
 
         # 구름 등 희미한 픽셀을 배경색으로
         diff_cloud = np.abs(gray.astype(np.int16) - bg_pixel)
@@ -201,9 +204,9 @@ class Vision:
         # normalized = (resized / 255.0).astype(np.float32)
         # return normalized
         # ai의 vision을 시각화
-        if self.LOGGING:
-            cv2.imshow("AI Vision", processed)
-            cv2.waitKey(1)
+        # if self.LOGGING:
+        #     cv2.imshow("AI Vision", processed)
+        #     cv2.waitKey(1)
         return resized
 
     # 게임 진행용 함수 (매 프레임마다 호출)

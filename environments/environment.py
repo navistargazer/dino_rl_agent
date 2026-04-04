@@ -24,24 +24,21 @@ class Environment:
 
     def restart_game(self):
         self.tick = 0
-        start = time.time()
         # self.action.click(self.coord)
-        while not self.is_game_over:
+        while self.is_game_over:
             self.action.jump()
+            time.sleep(0.0167)
+            # if self.is_not_mac:
+            #     time.sleep(0.02)
             self.action.wait()
-            if self.is_not_mac:
-                time.sleep(0.02)
             self.vision.grab_monitor()
 
-            if time.time() - start > 2:
-                break
         for _ in range(5):
             self.state = self.vision.get_next_state()
             self.action.click(self.coord)
             time.sleep(0.2)
         state = (self.state, self.tick)
         self.reward = 0
-        self.action.release_all()
         return state, self.is_game_over
 
     def step(self, action):
