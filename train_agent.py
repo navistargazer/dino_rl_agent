@@ -58,7 +58,7 @@ class HyperParameters:
     # 행동 보상 (사망, 대기)
     rewards: tuple[float, float] = (-1, 0.01)
     # 훈련 반복 수
-    num_episodes: int = 1500
+    num_episodes: int = 1000
     # 미니 배치 훈련에 사용할 과거 경험 개수
     batch_size: int = 32
     # 우선도 버퍼에서 꺼내는 비율
@@ -80,7 +80,7 @@ class HyperParameters:
     # 학습률
     learning_rate: float = 0.0001
     # 미래가치 할인율
-    gamma: float = 0.99
+    gamma: float = 0.97
     # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
 
@@ -314,13 +314,16 @@ class TrainAgent:
         _add_scalar = self.writer.add_scalar
 
         half_episode = self.NUM_EPISODES // 2
-        frame_since_update = 0
         episode_since_update = 0
+        frame_since_update = 0
+        loss_since_update = 0.1
+
         # 게임 에피소드 반복 시작
         for episode in range(self.NUM_EPISODES):
             # 최초 상태를 가져옴, 브라우저 초기화 및 게임 시작
             state, done = self._restart_game()
             # time.sleep(1)
+            episode_since_update += 1
             # q-value 시각화 준비
             epi_start_time = time.time()
             epi_frame_cnt = 0
@@ -447,15 +450,16 @@ class TrainAgent:
 
             # 타겟 하드 업데이트
             if self.TARGET_UPDATE == TargetUpdate.HARD:
-                episode_since_update += 1
                 # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트
-                if frame_since_update > self.UPDATE_FREQ and episode_since_update >= 3:
+                if (frame_since_update > self.UPDATE_FREQ and avg_loss < loss_since_update * 1.1) or episode_since_update >= 20:
                     self.target_model.load_state_dict(self.model.state_dict())
                     self.xprint(
-                        f"타겟 모델 업데이트 after {episode_since_update}episodes, {frame_since_update}frames"
+                        f"타겟 모델 업데이트 after {frame_since_update}frames"
                     )
                     frame_since_update = 0
                     episode_since_update = 0
+                    loss_since_update = max(0.001,avg_loss)
+
             # 결과 출력
             self.xprint(
                 f"Episode:{episode+1}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | TD_Error:{avg_td_error:.5f} | Loss:{avg_loss:.5f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
@@ -485,15 +489,15 @@ class TrainAgent:
             self.epsilon = max(self.EPSILON_MIN, self.epsilon * self.EPSILON_DECAY)
 
             # 텐서보드 로그
-            _add_scalar("Performance/1_Survival_Time", survival_time, episode)
-            _add_scalar("Performance/2_Total_Reward", reward_sum, episode)
-            _add_scalar("Brain/1_Fatal Q-Value", max_q, episode)
-            _add_scalar("Brain/2_Average TD Error", avg_td_error, episode)
-            _add_scalar("Brain/3_Average Loss", avg_loss, episode)
+            _add_scalar("2_Performance/1_Survival_Time", survival_time, episode)
+            _add_scalar("2_Performance/2_Total_Reward", reward_sum, episode)
+            _add_scalar("1_Brain/1_Fatal Q-Value", max_q, episode)
+            _add_scalar("1_Brain/2_Average TD Error", avg_td_error, episode)
+            _add_scalar("1_Brain/3_Average Loss", avg_loss, episode)
             if self.DQN_Type == DQNType.DUELING:
-                _add_scalar("Brain/4_Average Value", sum_value / epi_frame_cnt, episode)
+                _add_scalar("3_Dueling/4_Average Value", sum_value / epi_frame_cnt, episode)
                 _add_scalar(
-                    "Brain/5_Average Advantage", sum_advantage / epi_frame_cnt, episode
+                    "3_Dueling/5_Average Advantage", sum_advantage / epi_frame_cnt, episode
                 )
             self.writer.flush()
             # 그래프 저장

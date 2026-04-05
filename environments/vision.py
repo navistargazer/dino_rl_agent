@@ -204,9 +204,9 @@ class Vision:
         # normalized = (resized / 255.0).astype(np.float32)
         # return normalized
         # ai의 vision을 시각화
-        # if self.LOGGING:
-        #     cv2.imshow("AI Vision", processed)
-        #     cv2.waitKey(1)
+        if self.LOGGING:
+            cv2.imshow("AI Vision", processed)
+            cv2.waitKey(1)
         return resized
 
     # 게임 진행용 함수 (매 프레임마다 호출)
