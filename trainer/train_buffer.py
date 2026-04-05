@@ -84,6 +84,8 @@ def train_buffer(model, target_model, optimizer, batch, device, buffer_type, pus
         # 결정된 행동에 의한 실제보상(reward) + 할인율 * 예측한 최대 미래 가치 * 생존 여부
         # 신경망에 의한 행동 가치의 예측값의 정답지는 (실제 보상값) + 다음 상태의 예측값(부트스트래핑 - 예측값이 정답지???)
         target_q = rewards_tensor + gamma * max_next_q_values * (1 - dones_tensor)
+        # 시간차 오차(TD-Error)
+        td_errors = (acted_q - target_q).detach()
 
     # 3. 역전파
     # 손실함수 : 결과를 본 후 계산된 예측값 - 신경망 예측값 -> 시간차 오차(TD_error)
@@ -100,13 +102,15 @@ def train_buffer(model, target_model, optimizer, batch, device, buffer_type, pus
     # 하이브리드 듀얼 버퍼 : TD-error가 큰 기억은 우선도 버퍼에 밀어넣기
     if buffer_type == 2:
         # 오차의 절대값을 계산->토치 기울기 계산에서 분리->평탄화->cpu 램으로->넘파이배열
-        td_errors = torch.abs(acted_q - target_q).detach().squeeze().cpu().numpy()
+        abs_td_errors = torch.abs(td_errors).squeeze().cpu().numpy()
         # 오차 크기 상위 10% 정도를 기준점으로 삼음
-        threshold = np.percentile(td_errors, 90)
+        threshold = np.percentile(abs_td_errors, 90)
         # 배치의 기억 중 기준이상의 TD-error값을 가진 기억을 우선도 버퍼로
-        for i in range(len(batch)):
-            if td_errors[i] >= threshold:
-                push_to_priority(batch[i])
+        to_priority = np.where(abs_td_errors >= threshold)[0]
+        for i in to_priority:
+            push_to_priority(batch[i])
+
+    return td_errors.mean().item(), loss.item()
 
 
 

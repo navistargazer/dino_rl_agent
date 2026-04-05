@@ -201,6 +201,8 @@ class TrainAgent:
             self.target_model.eval()
 
         self.history_q_values = []
+        self.history_td_error = []
+        self.history_loss = []
         self.history_survived = []
 
     def validate_model(self, num_test=5):
@@ -326,6 +328,9 @@ class TrainAgent:
             # d3qn 시각화 준비
             if self.DQN_Type == DQNType.DUELING:
                 sum_value, sum_advantage = 0.0, 0.0
+            # avg_td_error
+            sum_td_error = 0.0
+            sum_loss = 0.0
             # 단일 에피소드 시작
             while not done:
                 frame_start = time.time()
@@ -365,8 +370,8 @@ class TrainAgent:
                     # epsilon-greedy 행동 결정
                     if _rand() < self.epsilon:
                         act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
-                        if self.epsilon == self.EPSILON_MIN:
-                            self.xprint(f"epsilon_action : {act_idx}")
+                        # if self.epsilon == self.EPSILON_MIN:
+                        #     self.xprint(f"epsilon_action : {act_idx}")
                     else:
                         act_idx = _argmax(
                             q_values
@@ -389,7 +394,7 @@ class TrainAgent:
                 if len(self.replaybuffer) > self.BATCH_SIZE:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
-                    train_buffer(
+                    avg_td_error, avg_loss = train_buffer(
                         self.model,
                         self.target_model,
                         self.optimizer,
@@ -400,8 +405,11 @@ class TrainAgent:
                         self.DQN_Type,
                         self.GAMMA,
                     )
+                    sum_td_error += avg_td_error
+                    sum_loss += avg_loss
+                    # 5. 타겟 네트워크 업데이트
                     # 타겟 네트워크 소프트 업데이트
-                    if self.TARGET_UPDATE == TargetUpdate.SOFT:
+                    if self.BUFFER_TYPE > 0 and  self.TARGET_UPDATE == TargetUpdate.SOFT:
                         # 매 스텝마다 타겟 네트워크를 소프트 업데이트
                         for target_param, online_param in zip(
                             self.target_model.parameters(), self.model.parameters()
@@ -428,8 +436,13 @@ class TrainAgent:
 
             # 에피소드 종료 생존시간
             survival_time = time.time() - epi_start_time
+            avg_td_error = sum_td_error / epi_frame_cnt
+            avg_loss = sum_loss / epi_frame_cnt
+
             # 기록
             self.history_q_values.append(max_q)
+            self.history_td_error.append(avg_td_error)
+            self.history_loss.append(avg_loss)
             self.history_survived.append(survival_time)
 
             # 타겟 하드 업데이트
@@ -445,7 +458,7 @@ class TrainAgent:
                     episode_since_update = 0
             # 결과 출력
             self.xprint(
-                f"Episode:{episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
+                f"Episode:{episode+1}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | TD_Error:{avg_td_error:.5f} | Loss:{avg_loss:.5f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
             )
 
             # 베스트 모델 저장 & 학습률 감소
@@ -474,15 +487,17 @@ class TrainAgent:
             # 텐서보드 로그
             _add_scalar("Performance/1_Survival_Time", survival_time, episode)
             _add_scalar("Performance/2_Total_Reward", reward_sum, episode)
-            _add_scalar("Brain/Max Q-Value", max_q, episode)
+            _add_scalar("Brain/1_Fatal Q-Value", max_q, episode)
+            _add_scalar("Brain/2_Average TD Error", avg_td_error, episode)
+            _add_scalar("Brain/3_Average Loss", avg_loss, episode)
             if self.DQN_Type == DQNType.DUELING:
-                _add_scalar("Brain/Average Value", sum_value / epi_frame_cnt, episode)
+                _add_scalar("Brain/4_Average Value", sum_value / epi_frame_cnt, episode)
                 _add_scalar(
-                    "Brain/Average Advantage", sum_advantage / epi_frame_cnt, episode
+                    "Brain/5_Average Advantage", sum_advantage / epi_frame_cnt, episode
                 )
             self.writer.flush()
             # 그래프 저장
-            draw_plots(self.history_survived, self.history_q_values, self.plot_path)
+            draw_plots(self.history_q_values, self.history_td_error, self.history_loss, self.history_survived, self.plot_path)
 
         # 훈련 종료
         self.writer.close()
