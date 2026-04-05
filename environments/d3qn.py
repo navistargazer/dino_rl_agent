@@ -23,8 +23,8 @@ class D3QN(nn.Module):
         pixel = self.get_pixel_size(pixel, layer_3.kernel_size, layer_3.stride, layer_3.padding)
 
         # FC 층(Q-Value 계산)
-        # 64x64 이미지가 세 번의 conv를 거치면 4x4 크기가 됨 (4096 = 64 * 16 * 4)
-        flatten_size = 64 * pixel * pixel * 4
+        # 256x64 이미지가 세 번의 conv를 거치면 16x4 크기가 됨 (4096 = 64 * 16 * 4)
+        flatten_size = 64 * (pixel * 4) * pixel
 
         # Dueling Network
         # 1. 가치(Value) 흐름 - value of state

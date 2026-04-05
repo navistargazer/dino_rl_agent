@@ -8,11 +8,11 @@ import os
 class Vision:
     def __init__(self, img_process_type=1, pixel=64, logging=True):
         self.IMG_PROCESS_TYPE = img_process_type
-        self.PIXEL_H = pixel * 4
-        self.PIXEL_V = pixel
+        self.PIXEL_WIDTH = pixel * 4
+        self.PIXEL_HEIGHT = pixel
         self.LOGGING = logging
         print(
-            f"[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE.name}, 이미지 크기: {self.PIXEL_H}x{self.PIXEL_V}"
+            f"[INFO] 이미지 전처리 타입: {self.IMG_PROCESS_TYPE.name}, 이미지 크기: {self.PIXEL_WIDTH}x{self.PIXEL_HEIGHT}"
         )
         self.sct = mss.mss()
         self.cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -199,7 +199,7 @@ class Vision:
             processed = curr_frame
         # 리사이즈 및 노멀라이즈
         resized = cv2.resize(
-            processed, (self.PIXEL_H, self.PIXEL_V), interpolation=cv2.INTER_AREA
+            processed, (self.PIXEL_WIDTH, self.PIXEL_HEIGHT), interpolation=cv2.INTER_AREA
         )
         # normalized = (resized / 255.0).astype(np.float32)
         # return normalized

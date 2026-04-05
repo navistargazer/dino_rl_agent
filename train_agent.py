@@ -371,7 +371,9 @@ class TrainAgent:
                         q_values = self.model(state_tensor)
 
                     # epsilon-greedy 행동 결정
-                    if _rand() < self.epsilon:
+                    # 유효 엡실론 도입: 학습이 진행된 후 최고기록의 절반까지는 엡실론을 끄기
+                    effective_epsilon = 0 if tick < self.best_score * 5e-5 else self.epsilon
+                    if _rand() < effective_epsilon:
                         act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
                         # if self.epsilon == self.EPSILON_MIN:
                         #     self.xprint(f"epsilon_action : {act_idx}")
@@ -454,7 +456,7 @@ class TrainAgent:
                 if (frame_since_update > self.UPDATE_FREQ and avg_loss < loss_since_update * 1.1) or episode_since_update >= 20:
                     self.target_model.load_state_dict(self.model.state_dict())
                     self.xprint(
-                        f"타겟 모델 업데이트 after {frame_since_update}frames"
+                        f"타겟 모델 업데이트 after {frame_since_update}frames | loss since update: {loss_since_update:.5f} | current loss: {avg_loss:.5f}"
                     )
                     frame_since_update = 0
                     episode_since_update = 0

@@ -29,10 +29,9 @@ class Environment:
             time.sleep(0.0167)
             self.action.wait()
             self.vision.grab_monitor()
-
+        # 안전하게 5프레임 스택
         for _ in range(5):
             self.state = self.vision.get_next_state()
-            self.action.click(self.coord)
             time.sleep(0.2)
         state = (self.state, self.tick)
         return state, self.is_game_over
