@@ -6,3 +6,5 @@ pyautogui
 torch
 opencv-python
 tensorboard
+selenium
+webdriver-manager
