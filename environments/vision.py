@@ -160,7 +160,7 @@ class Vision:
 
         # 맥과 윈도우의 픽셀 밀림을 영역으로 판단함으로써 해결
         bg_pixel = gray[0, 100]
-        gameover = gray[0:3, 145:150].astype(np.int16)
+        gameover = gray[0:3, 145:155].astype(np.int16)
         diff_area = np.abs(gameover - bg_pixel)
         if np.max(diff_area) > 100:
             self.gameover_detected = True
