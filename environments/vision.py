@@ -206,7 +206,7 @@ class Vision:
         # ai의 vision을 시각화
         if self.LOGGING:
             cv2.imshow("AI Vision", processed)
-            cv2.moveWindow("AI Vision", 0, 0)
+            cv2.moveWindow("AI Vision", 154, 0)
             cv2.waitKey(1)
         return resized
 

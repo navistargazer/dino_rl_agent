@@ -21,7 +21,7 @@ class DQN(nn.Module):
 
         # FC 층(Q-Value 계산)
         # 64x64 이미지가 세 번의 conv를 거치면 8x8 크기가 됨 (4096 = 64 * 8 * 8)
-        flatten_size = 64 * pixel * pixel
+        flatten_size = 64 * (pixel * 4) * pixel
         self.fc1 = nn.Linear(flatten_size + 1, 512)  # (1, 512)
         self.fc2 = nn.Linear(512, num_actions)  # (1, 3)
 

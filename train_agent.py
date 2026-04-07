@@ -46,7 +46,7 @@ class TargetUpdate(IntEnum):
 @dataclass
 class HyperParameters:
     # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )
-    dqn_type: DQNType = DQNType.DUELING
+    dqn_type: DQNType = DQNType.DOUBLE
     # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
     img_process: ImgProcess = ImgProcess.CANNY
     # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
@@ -173,6 +173,7 @@ class TrainAgent:
         if os.path.exists(self.model_path):
             checkpoint = torch.load(self.model_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             self.best_score = checkpoint["best_score"]
             self.epsilon = max(checkpoint["epsilon"], 0.5)
             self.xprint(
@@ -280,6 +281,7 @@ class TrainAgent:
             self.best_score = best_score
             checkpoint = {
                 "model_state_dict": self.model.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
                 "best_score": self.best_score,
                 "epsilon": self.epsilon,
             }
@@ -396,7 +398,7 @@ class TrainAgent:
 
                 # ===== 미니 배치 훈련(미분 및 역전파) ======
                 # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-                if len(self.replaybuffer) > self.BATCH_SIZE:
+                if len(self.replaybuffer) > 10000:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     avg_td_error, avg_loss = train_buffer(
