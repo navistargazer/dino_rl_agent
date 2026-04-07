@@ -374,8 +374,8 @@ class TrainAgent:
 
                     # epsilon-greedy 행동 결정
                     # 유효 엡실론 도입: 학습이 진행된 후 최고기록의 절반까지는 엡실론을 끄기
-                    effective_epsilon = 0 if tick < self.best_score * 5e-5 else self.epsilon
-                    if _rand() < effective_epsilon:
+                    epsilon = self.epsilon if tick > self.best_score * 5e-5 * self.FPS else 0
+                    if _rand() < epsilon:
                         act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
                         # if self.epsilon == self.EPSILON_MIN:
                         #     self.xprint(f"epsilon_action : {act_idx}")
@@ -398,7 +398,7 @@ class TrainAgent:
 
                 # ===== 미니 배치 훈련(미분 및 역전파) ======
                 # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
-                if len(self.replaybuffer) > 10000:
+                if len(self.replaybuffer) > 1000:
                     epi_progress = episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     avg_td_error, avg_loss = train_buffer(
