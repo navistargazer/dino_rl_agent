@@ -5,23 +5,27 @@ import torch.nn.functional as F
 class DQN(nn.Module):
     def __init__(self, input_channels=4, num_actions=3, input_pixel=64):
         super(DQN, self).__init__()
-        # 합성곱 계층, 입력:(1, 4, 64, 64)
+        layer_1 = LayerParams(5, 4, 2)
+        layer_2 = LayerParams(3, 2, 1)
+        layer_3 = LayerParams(3, 2, 1)
+        # 합성곱 계층, 입력:(1, 4, 256, 64)
         self.conv1 = nn.Conv2d(
-            input_channels, 32, kernel_size=7, stride=2, padding=3
-        )  # (1, 32, 32, 32)
-        pixel = self.get_pixel_size(input_pixel, kernel_size=7, stride=2, padding=3)
+            input_channels, 32, kernel_size=layer_1.kernel_size, stride=layer_1.stride, padding=layer_1.padding
+        )  # (1, 32, 64, 16)
+        pixel = self.get_pixel_size(input_pixel, layer_1.kernel_size, layer_1.stride, layer_1.padding)
         self.conv2 = nn.Conv2d(
-            32, 64, kernel_size=5, stride=2, padding=2
-        )  # (1, 64, 16, 16)
-        pixel = self.get_pixel_size(pixel, kernel_size=5, stride=2, padding=2)
+            32, 64, kernel_size=layer_2.kernel_size, stride=layer_2.stride, padding=layer_2.padding
+        )  # (1, 64, 32, 8)
+        pixel = self.get_pixel_size(pixel, layer_2.kernel_size, layer_2.stride, layer_2.padding)
         self.conv3 = nn.Conv2d(
-            64, 64, kernel_size=3, stride=2, padding=1
-        )  # (1, 64, 8, 8)
-        pixel = self.get_pixel_size(pixel, kernel_size=3, stride=2, padding=1)
+            64, 64, kernel_size=layer_3.kernel_size, stride=layer_3.stride, padding=layer_3.padding
+        )  # (1, 64, 16, 4)
+        pixel = self.get_pixel_size(pixel, layer_3.kernel_size, layer_3.stride, layer_3.padding)
 
         # FC 층(Q-Value 계산)
-        # 64x64 이미지가 세 번의 conv를 거치면 8x8 크기가 됨 (4096 = 64 * 8 * 8)
+        # 256x64 이미지가 세 번의 conv를 거치면 16x4 크기가 됨 (4096 = 64 * 16 * 4)
         flatten_size = 64 * (pixel * 4) * pixel
+
         self.fc1 = nn.Linear(flatten_size + 1, 512)  # (1, 512)
         self.fc2 = nn.Linear(512, num_actions)  # (1, 3)
 
@@ -51,3 +55,9 @@ class DQN(nn.Module):
         # Q-Value 계산(행동별 점수)
         q_values = self.fc2(x)  # (1, 3)
         return q_values
+
+class LayerParams:
+    def __init__(self, kernel_size, stride, padding):
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
