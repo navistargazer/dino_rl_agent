@@ -206,7 +206,7 @@ class TrainAgent:
         self.history_loss = []
         self.history_survived = []
 
-    def validate_model(self, num_test=5):
+    def validate_model(self, episode, num_test=5):
         """
         훈련 도중 엡실론을 제거한 진짜 실력을 검증하고 베스트 모델을 저장
         epsilon = 0, 버퍼 저장 및 배치 훈련 안함
@@ -279,16 +279,16 @@ class TrainAgent:
         # 베스트 모델 저장
         if best_score > self.best_score:
             self.best_score = best_score
-            checkpoint = {
-                "model_state_dict": self.model.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "best_score": self.best_score,
-                "epsilon": self.epsilon,
-            }
-            torch.save(checkpoint, self.model_path)
             self.xprint(f"{best_score:.3f}로 베스트 모델이 갱신되었습니다.")
         else:
             self.xprint("모델 갱신 실패")
+        checkpoint = {
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "best_score": best_score,
+            "epsilon": self.epsilon,
+        }
+        torch.save(checkpoint, os.path.join(self.BASE_DIR, f"models/{self.model_name}_{episode}_{best_score:.3f}.pth"))
 
     # 에이전트 훈련 함수
     def train_agent(self):
@@ -322,6 +322,7 @@ class TrainAgent:
 
         # 게임 에피소드 반복 시작
         for episode in range(self.NUM_EPISODES):
+            num_episode = episode + 1
             # 최초 상태를 가져옴, 브라우저 초기화 및 게임 시작
             state, done = self._restart_game()
             # time.sleep(1)
@@ -399,7 +400,7 @@ class TrainAgent:
                 # ===== 미니 배치 훈련(미분 및 역전파) ======
                 # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
                 if len(self.replaybuffer) > 1000:
-                    epi_progress = episode / self.NUM_EPISODES
+                    epi_progress = num_episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
                     avg_td_error, avg_loss = train_buffer(
                         self.model,
@@ -466,26 +467,26 @@ class TrainAgent:
 
             # 결과 출력
             self.xprint(
-                f"Episode:{episode+1}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | TD_Error:{avg_td_error:.5f} | Loss:{avg_loss:.5f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
+                f"Episode:{num_episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | TD_Error:{avg_td_error:.5f} | Loss:{avg_loss:.5f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
             )
 
             # 베스트 모델 저장 & 학습률 감소
-            if (episode + 1) % 100 == 0:
+            if (num_episode) % 100 == 0:
                 # 사망 시 에이전트의 시야 확인
                 frames, _ = next_state
                 record_path = os.path.join(self.BASE_DIR, "results")
                 os.makedirs(record_path, exist_ok=True)
-                self.env.vision.record_death(frames, episode + 1, record_path)
+                self.env.vision.record_death(frames, num_episode, record_path)
                 # 실제 테스트로 모델 검증
-                self.xprint(f"{episode + 1}에피소드 완료. 모델 테스트 5회 진행 중")
-                self.validate_model(num_test=5)
+                self.xprint(f"{num_episode}에피소드 완료. 모델 테스트 5회 진행 중")
+                self.validate_model(episode=num_episode, num_test=5)
                 # 학습률 감소
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
                 self.xprint(f"학습률 감소 : {self.optimizer.param_groups[0]['lr']:.7f}")
-            elif (episode > half_episode) and (survival_time > self.best_score * 1.2):
+            elif (num_episode > half_episode) and (survival_time > self.best_score * 1.2):
                 self.xprint(
-                    f"{episode + 1}에피소드에서 기존 기록 20% 이상 갱신, 모델 테스트 5회 진행 중"
+                    f"{num_episode}에피소드에서 기존 기록 20% 이상 갱신, 모델 테스트 5회 진행 중"
                 )
                 self.validate_model(num_test=5)
 
@@ -493,15 +494,15 @@ class TrainAgent:
             self.epsilon = max(self.EPSILON_MIN, self.epsilon * self.EPSILON_DECAY)
 
             # 텐서보드 로그
-            _add_scalar("2_Performance/1_Survival_Time", survival_time, episode)
-            _add_scalar("2_Performance/2_Total_Reward", reward_sum, episode)
-            _add_scalar("1_Brain/1_Fatal Q-Value", max_q, episode)
-            _add_scalar("1_Brain/2_Average TD Error", avg_td_error, episode)
-            _add_scalar("1_Brain/3_Average Loss", avg_loss, episode)
+            _add_scalar("2_Performance/1_Survival_Time", survival_time, num_episode)
+            _add_scalar("2_Performance/2_Total_Reward", reward_sum, num_episode)
+            _add_scalar("1_Brain/1_Fatal Q-Value", max_q, num_episode)
+            _add_scalar("1_Brain/2_Average TD Error", avg_td_error, num_episode)
+            _add_scalar("1_Brain/3_Average Loss", avg_loss, num_episode)
             if self.DQN_Type == DQNType.DUELING:
-                _add_scalar("3_Dueling/4_Average Value", sum_value / epi_frame_cnt, episode)
+                _add_scalar("3_Dueling/4_Average Value", sum_value / epi_frame_cnt, num_episode)
                 _add_scalar(
-                    "3_Dueling/5_Average Advantage", sum_advantage / epi_frame_cnt, episode
+                    "3_Dueling/5_Average Advantage", sum_advantage / epi_frame_cnt, num_episode
                 )
             self.writer.flush()
             # 그래프 저장
