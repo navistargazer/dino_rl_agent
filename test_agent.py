@@ -6,9 +6,8 @@ chrome의 dino 게임을 플레이하는 인공지능 (테스트용)
 import numpy as np
 import time
 import torch
-import os
-import csv
 from environments import DQN, D3QN, Environment
+import os
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -28,45 +27,60 @@ class ImgProcess(IntEnum):
     DIFF = 2
 
 
+class BufferType(IntEnum):
+    SINGLE = 0
+    DUAL = 1
+    HYBRID = 2
+
+
+class TargetUpdate(IntEnum):
+    HARD = 0
+    SOFT = 1
+
+
 @dataclass
 class HyperParameters:
     # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )
-    dqn_type: DQNType = DQNType.DUELING
+    dqn_type: DQNType = DQNType.DOUBLE
     # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
     img_process: ImgProcess = ImgProcess.CANNY
+    # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
+    buffer_type: BufferType = BufferType.HYBRID
+    # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
+    target_update: TargetUpdate = TargetUpdate.HARD
     # CNN 인풋용 리사이즈 픽셀크기
     pixel: int = 64
     # 행동 보상 (사망, 대기)
     rewards: tuple[float, float] = (-1, 0.01)
-    # 초당 프레임 수
-    fps: int = 10
+   # 초당 프레임 수
+    fps: int = 15
     # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
-    # 반복 수
-    num_episodes: int = 50
 
     # 들어온 값을 enum 오브젝트로 캐스팅
     def __post_init__(self):
         self.dqn_type = DQNType(self.dqn_type)
         self.img_process = ImgProcess(self.img_process)
+        self.buffer_type = BufferType(self.buffer_type)
+        self.target_update = TargetUpdate(self.target_update)
 
 
 class TestAgent:
-    def __init__(
-        self, hp: HyperParameters = HyperParameters(), model_name="None", logging=True
-    ):
+    def __init__(self, hp: HyperParameters = HyperParameters(), logging=True):
         self.DQN_Type = hp.dqn_type
         self.IMG_PROCESS_TYPE = hp.img_process
+        self.BUFFER_TYPE = hp.buffer_type
+        self.TARGET_UPDATE = hp.target_update
         self.PIXEL = hp.pixel
         self.REWARDS = hp.rewards
+        self.NUM_EPISODES = hp.num_episodes
         self.FPS = hp.fps
         self.LOGGING = not hp.without_log
-        self.NUM_EPISODES = hp.num_episodes
-        self.model_name = model_name
 
-        # print(
-        #     f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
-        # )
+        # 하이퍼 파라미터 출력
+        print(
+            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 생존]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
+        )
 
         # 디바이스 설정
         if torch.cuda.is_available():
@@ -85,7 +99,6 @@ class TestAgent:
         self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
             self.device
         )  # 학습자의 두뇌
-        # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
         self.env = Environment(
             self.IMG_PROCESS_TYPE,
             self.PIXEL,
@@ -98,36 +111,47 @@ class TestAgent:
 
         self.frame_time = 1.0 / self.FPS
 
-        # 학습 이어하기(모델 저장 파일 로드)
+       # 학습 이어하기(모델 저장 파일 로드)
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        # self.model_name = f"best_model_{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
+        self.model_name = f"{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
         self.model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
         self.xprint(f"{self.model_name} 모델 사용,", end=" ")
         if os.path.exists(self.model_path):
             checkpoint = torch.load(self.model_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
+            # self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             self.best_score = checkpoint["best_score"]
-            self.epsilon = checkpoint["epsilon"]
-            self.xprint("모델 로드 완료")
+            self.xprint(
+                f"이어서 학습 시작 (기존 최고 생존: {self.best_score} / Epsilon: {self.epsilon:.3f})"
+            )
         else:
-            self.xprint(f"[경고] {self.model_path} 파일이 없습니다.")
+            os.makedirs(os.path.join(self.BASE_DIR, "models"), exist_ok=True)
+            self.best_score = 0
+            self.epsilon = 1.0
+            self.xprint("새로운 학습 시작")
 
+        self.history_q_values = []
+        self.history_td_error = []
+        self.history_loss = []
+        self.history_survived = []
 
-    def run_test(self):
-        self.xprint(
-            f"\n{self.NUM_EPISODES} 에피소드 동안 순수 모델 성능 테스트를 시작합니다."
-        )
-
-        # 평가 모드 설정
+    def validate_model(self, num_test=50):
+        """
+        훈련 도중 엡실론을 제거한 진짜 실력을 검증하고 베스트 모델을 저장
+        epsilon = 0, 버퍼 저장 및 배치 훈련 안함
+        """
+        # 모델 평가 모드로 전환
         self.model.eval()
-        survival_records = []
+        # 생존 시간 기록
+        survival_record = []
         _argmax = torch.argmax
         _max = torch.max
 
-        # 미분 및 기울기 계산 무시 (역전파 방지)
+        # 시각화 준비
+
         # 미분 없이 에피소드 루프
         with torch.no_grad():
-            for i in range(self.NUM_EPISODES):
+            for i in range(num_test):
                 state, done = self._restart_game()
                 epi_start_time = time.time()
                 reward_sum = 0.0
@@ -170,43 +194,19 @@ class TestAgent:
                 # self.history_survived.append(survival_time)
                 # 결과 출력
                 self.xprint(
-                    f"Test:{i+1}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
+                    f"Test:{i+1}/{num_test} | Survived:{survival_time:.3f} | Max_Q:{max_q:.3f} | Total Reward:{reward_sum:.2f}"
                 )
+                survival_record.append(survival_time)
 
-        # 통계 계산
-        mean_val = np.mean(survival_records)
-        std_val = np.std(survival_records)
-        max_val = np.max(survival_records)
-        median_val = np.median(survival_records)
-
-        self.xprint("\n" + "=" * 40)
-        self.xprint(f"[{self.model_name}] 테스트 결과 요약")
-        self.xprint(f"평균 생존 기간: {mean_val:.3f} 초")
-        self.xprint(f"표준 편차    : {std_val:.3f} 초")
-        self.xprint(f"최대 생존 기간: {max_val:.3f} 초")
-        self.xprint(f"중앙값       : {median_val:.3f} 초")
-        self.xprint("=" * 40)
-
-        # CSV 저장
-        result_dir = os.path.join(self.BASE_DIR, "results")
-        os.makedirs(result_dir, exist_ok=True)
-        csv_filename = os.path.join(result_dir, f"test_stats_{self.model_name}.csv")
-
-        with open(csv_filename, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            # 통계 데이터 기록
-            writer.writerow(["Metric", "Value (Seconds)"])
-            writer.writerow(["Mean", f"{mean_val:.3f}"])
-            writer.writerow(["Std", f"{std_val:.3f}"])
-            writer.writerow(["Max", f"{max_val:.3f}"])
-            writer.writerow(["Median", f"{median_val:.3f}"])
-            writer.writerow([])
-            # 에피소드 전체 기록 포함
-            writer.writerow(["Episode", "Survival Time (Seconds)"])
-            for i, record in enumerate(survival_records):
-                writer.writerow([i + 1, f"{record:.3f}"])
-
-        self.xprint(f"\n결과가 CSV 파일로 저장되었습니다: {csv_filename}")
+        # 최대 생존 시간
+        best_score = np.mean(survival_record).item()
+        # 베스트 모델 저장
+        if best_score > self.best_score:
+            self.best_score = best_score
+            self.xprint(f"{best_score:.3f}로 베스트 모델이 갱신되었습니다.")
+        else:
+            self.xprint("모델 갱신 실패")
+        
 
     def xprint(self, text, end="\n", flush=False):
         if self.LOGGING:
@@ -248,6 +248,6 @@ if __name__ == "__main__":
 
     hp = HyperParameters(**custom_kwargs)
     test_agent = TestAgent(
-        hp=hp, model_name="DUELING_HYBRID_CANNY_HARD", logging=True
+        hp=hp, logging=True
     )
-    test_agent.run_test()
+    test_agent.validate_model()

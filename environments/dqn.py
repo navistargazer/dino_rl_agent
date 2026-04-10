@@ -1,43 +1,56 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .noisy_linear import NoisyLinear
+
+class LayerParams:
+    def __init__(self, kernel_size, stride, padding):
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
 
 class DQN(nn.Module):
-    def __init__(self, input_channels=4, num_actions=3, input_pixel=64):
+    def __init__(self, input_shape=(4, 64, 256), num_actions=3, noisy_net=True):
         super(DQN, self).__init__()
         layer_1 = LayerParams(5, 4, 2)
         layer_2 = LayerParams(3, 2, 1)
         layer_3 = LayerParams(3, 2, 1)
-        # 합성곱 계층, 입력:(1, 4, 256, 64)
+        # 합성곱 계층, 입력:(배치, 채널, 행, 열) = (1, 4, 64, 256)
         self.conv1 = nn.Conv2d(
-            input_channels, 32, kernel_size=layer_1.kernel_size, stride=layer_1.stride, padding=layer_1.padding
-        )  # (1, 32, 64, 16)
-        pixel = self.get_pixel_size(input_pixel, layer_1.kernel_size, layer_1.stride, layer_1.padding)
+            input_shape[0], 32, kernel_size=layer_1.kernel_size, stride=layer_1.stride, padding=layer_1.padding
+        )  # (1, 32, 16, 64)
         self.conv2 = nn.Conv2d(
             32, 64, kernel_size=layer_2.kernel_size, stride=layer_2.stride, padding=layer_2.padding
-        )  # (1, 64, 32, 8)
-        pixel = self.get_pixel_size(pixel, layer_2.kernel_size, layer_2.stride, layer_2.padding)
+        )  # (1, 64, 8, 32)
         self.conv3 = nn.Conv2d(
             64, 64, kernel_size=layer_3.kernel_size, stride=layer_3.stride, padding=layer_3.padding
-        )  # (1, 64, 16, 4)
-        pixel = self.get_pixel_size(pixel, layer_3.kernel_size, layer_3.stride, layer_3.padding)
+        )  # (1, 64, 4, 16)
 
         # FC 층(Q-Value 계산)
-        # 256x64 이미지가 세 번의 conv를 거치면 16x4 크기가 됨 (4096 = 64 * 16 * 4)
-        flatten_size = 64 * (pixel * 4) * pixel
+        # 256x64 이미지가 세 번의 conv를 거치면 4x16 크기가 됨 (4096 = 64 * 4 * 16)
+        # 크기 계산용 더미 텐서를 사용
+        dummy_input = torch.empty(1, *input_shape)
+        with torch.no_grad():
+            dummy_output = F.relu(self.conv1(dummy_input))
+            dummy_output = F.relu(self.conv2(dummy_output))
+            dummy_output = F.relu(self.conv3(dummy_output))
+        flatten_size = dummy_output.view(1, -1).size(1)  # (1, 4096)
 
-        self.fc1 = nn.Linear(flatten_size + 1, 512)  # (1, 512)
-        self.fc2 = nn.Linear(512, num_actions)  # (1, 3)
+        self.noisy_net = noisy_net
+        # noisy_network
+        if self.noisy_net:
+            self.fc1 = NoisyLinear(flatten_size + 1, 512)  # (1, 512)
+            self.fc2 = NoisyLinear(512, num_actions)  # (1, 3)
+        else:
+            self.fc1 = nn.Linear(flatten_size + 1, 512)  # (1, 512)
+            self.fc2 = nn.Linear(512, num_actions)  # (1, 3)
 
         # (선택) 가중치 초기화: ReLU를 사용하는 네트워크의 국룰
         nn.init.kaiming_uniform_(self.conv1.weight, nonlinearity="relu")
         nn.init.kaiming_uniform_(self.conv2.weight, nonlinearity="relu")
         nn.init.kaiming_uniform_(self.conv3.weight, nonlinearity="relu")
-        nn.init.kaiming_uniform_(self.fc1.weight, nonlinearity="relu")
-
-    def get_pixel_size(self, input_size, kernel_size, stride, padding):
-        pixel = (input_size - kernel_size + 2 * padding) / stride + 1
-        return int(pixel)
+        if not self.noisy_net:
+            nn.init.kaiming_uniform_(self.fc1.weight, nonlinearity="relu")
 
     def forward(self, state):
         # 상태를 이미지스택과 시간으로 분리
@@ -55,9 +68,10 @@ class DQN(nn.Module):
         # Q-Value 계산(행동별 점수)
         q_values = self.fc2(x)  # (1, 3)
         return q_values
+    
+    def reset_noise(self):
+        if self.noisy_net:
+            self.fc1.reset_noise()
+            self.fc2.reset_noise()
 
-class LayerParams:
-    def __init__(self, kernel_size, stride, padding):
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.padding = padding
+

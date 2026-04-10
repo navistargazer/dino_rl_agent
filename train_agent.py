@@ -42,6 +42,12 @@ class TargetUpdate(IntEnum):
     HARD = 0
     SOFT = 1
 
+class Exploration(IntEnum):
+    NONE = 0
+    EPSILON_GREEDY = 1
+    NOISY_NET = 2
+
+
 
 @dataclass
 class HyperParameters:
@@ -53,7 +59,9 @@ class HyperParameters:
     buffer_type: BufferType = BufferType.HYBRID
     # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
     target_update: TargetUpdate = TargetUpdate.HARD
-    # CNN 인풋용 리사이즈 픽셀크기
+    # 탐험 정책(0:엡실론-그리디, 1:노이지 네트워크)
+    exploration: Exploration = Exploration.NOISY_NET
+    # CNN 인풋용 리사이즈 픽셀 세로 크기
     pixel: int = 64
     # 행동 보상 (사망, 대기)
     rewards: tuple[float, float] = (-1, 0.01)
@@ -70,7 +78,7 @@ class HyperParameters:
     # 초당 프레임 수
     fps: int = 15
     # 엡실론(랜덤 탐험 비율) 최소값
-    epsilon_min: float = 0.05
+    epsilon_min: float = 0.01
     # 에피소드 당 엡실론 감소율
     epsilon_decay: float = 0.995
     # 타겟 네트워크 업데이트 주기
@@ -98,6 +106,7 @@ class TrainAgent:
         self.IMG_PROCESS_TYPE = hp.img_process
         self.BUFFER_TYPE = hp.buffer_type
         self.TARGET_UPDATE = hp.target_update
+        self.Exploration = hp.exploration
         self.PIXEL = hp.pixel
         self.REWARDS = hp.rewards
         self.NUM_EPISODES = hp.num_episodes
@@ -116,7 +125,8 @@ class TrainAgent:
 
         # 하이퍼 파라미터 출력
         print(
-            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 생존]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
+            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | Exploration:{self.Exploration.name}", 
+            f"\n[INFO] REWARD:[사망, 생존]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
         )
 
         # 디바이스 설정
@@ -133,13 +143,22 @@ class TrainAgent:
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
-        self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
-            self.device
-        )  # 학습자의 두뇌
+        # 모델에 전달하는 파라미터 딕셔너리 - **로 언패킹해서 쓰면 됨
+        model_params = {
+            "input_shape": (4, self.PIXEL, self.PIXEL * 4),
+            "num_actions": 3,
+            "noisy_net": self.Exploration == Exploration.NOISY_NET,
+        }
+        self.model = CNN(**model_params).to(self.device)  # 학습자의 두뇌
         # target model - nature DQN부터 타겟 네트워크 가동
-        self.target_model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
-            self.device
-        )  # 목표 신경망
+        # dqn 버전이 올라가면 타겟 모델 등장
+        if self.DQN_Type > 0:
+            self.target_model = CNN(**model_params).to(self.device)  # 목표 신경망
+            # 타겟 모델에 현행 모델의 상태 주입
+            self.target_model.load_state_dict(self.model.state_dict())
+            # 타겟 모델은 학습 없이 평가모드로
+            if self.Exploration != Exploration.NOISY_NET:
+                self.target_model.eval()
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
         self.env = Environment(
@@ -167,15 +186,15 @@ class TrainAgent:
 
         # 학습 이어하기(모델 저장 파일 로드)
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.model_name = f"{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
-        self.model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
+        self.model_name = f"{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}_{self.Exploration.name}"
+        self.best_model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
         self.xprint(f"{self.model_name} 모델 사용,", end=" ")
-        if os.path.exists(self.model_path):
-            checkpoint = torch.load(self.model_path)
+        if os.path.exists(self.best_model_path):
+            checkpoint = torch.load(self.best_model_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             self.best_score = checkpoint["best_score"]
-            self.epsilon = max(checkpoint["epsilon"], 0.5)
+            self.epsilon = max(checkpoint["epsilon"], 0.1)
             self.xprint(
                 f"이어서 학습 시작 (기존 최고 생존: {self.best_score} / Epsilon: {self.epsilon:.3f})"
             )
@@ -194,12 +213,6 @@ class TrainAgent:
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, f"{self.model_name}")
         self.writer = SummaryWriter(log_path)  # run/self.model_name 폴더에 로그가 쌓임
-        # dqn 버전이 올라가면 타겟 모델 등장
-        if self.DQN_Type > 0:
-            # 타겟 모델에 현행 모델의 상태 주입
-            self.target_model.load_state_dict(self.model.state_dict())
-            # 타겟 모델은 학습 없이 평가모드로
-            self.target_model.eval()
 
         self.history_q_values = []
         self.history_td_error = []
@@ -275,20 +288,23 @@ class TrainAgent:
         # draw_plots(self.history_survived, self.history_q_values, self.plot_path)
 
         # 최대 생존 시간
-        best_score = np.mean(survival_record).item()
-        # 베스트 모델 저장
-        if best_score > self.best_score:
-            self.best_score = best_score
-            self.xprint(f"{best_score:.3f}로 베스트 모델이 갱신되었습니다.")
-        else:
-            self.xprint("모델 갱신 실패")
+        best_score = max(survival_record)
+        # 정기적 모델 저장
         checkpoint = {
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "best_score": best_score,
             "epsilon": self.epsilon,
         }
-        torch.save(checkpoint, os.path.join(self.BASE_DIR, f"models/{self.model_name}_{episode}_{best_score:.3f}.pth"))
+        torch.save(checkpoint, os.path.join(self.BASE_DIR, f"models/{self.model_name}_Ep{episode}_{best_score:.3f}s.pth"))
+
+        # 베스트 모델 저장
+        if best_score > self.best_score:
+            self.best_score = best_score
+            torch.save(checkpoint, self.best_model_path)
+            self.xprint(f"{best_score:.3f}로 최고 기록이 갱신되었습니다.")
+        else:
+            self.xprint("기록 갱신 실패")
 
     # 에이전트 훈련 함수
     def train_agent(self):
@@ -347,7 +363,6 @@ class TrainAgent:
                 # q값 연선에서는 기울기 계산은 필요 없음(나중에 배치 훈련에서만 역전파 업데이트)
                 with torch.no_grad():
                     # 현재 state를 device에 올리고 신경망 모델에서 q값을 받아옴
-                    # dueling에서는 V값과 A값을 받아와서 시각화 등이 가능함.
                     # state의 이미지 스택과 시간틱을 언패킹해서 텐서로 변환 후 gpu로
                     img, tick = state
                     # img_tensor = img.to(self.device).float() / 255.0
@@ -360,6 +375,11 @@ class TrainAgent:
                     ).view(1, 1)
                     state_tensor = (img_tensor, tick_tensor)
 
+                    # noisy network 사용시 노이즈 초기화
+                    if self.Exploration == Exploration.NOISY_NET:
+                        self.model.reset_noise()
+
+                    # dueling에서는 V값과 A값을 받아와서 시각화 등이 가능함.
                     if self.DQN_Type == DQNType.DUELING:
                         q_values, val, adv = self.model(
                             state_tensor, return_dueling=True
@@ -374,16 +394,16 @@ class TrainAgent:
                         q_values = self.model(state_tensor)
 
                     # epsilon-greedy 행동 결정
-                    # 유효 엡실론 도입: 학습이 진행된 후 최고기록의 절반까지는 엡실론을 끄기
-                    epsilon = self.epsilon if tick > self.best_score * 5e-5 * self.FPS else 0
-                    if _rand() < epsilon:
-                        act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
-                        # if self.epsilon == self.EPSILON_MIN:
-                        #     self.xprint(f"epsilon_action : {act_idx}")
+                    if self.Exploration == Exploration.EPSILON_GREEDY:
+                        # 유효 엡실론 도입: 학습이 진행된 후 최고기록의 절반까지는 엡실론을 끄기
+                        epsilon = self.epsilon if tick > self.best_score * 5e-5 * self.FPS else 0
+                        if _rand() < epsilon:
+                            act_idx = _randint(3)  # 랜덤(0:대기, 1:점프, 2:숙이기)
+                            # if self.epsilon == self.EPSILON_MIN:
+                            #     self.xprint(f"epsilon_action : {act_idx}")
+                    # 최대 가지를 가진 행동의 인덱스를 선택
                     else:
-                        act_idx = _argmax(
-                            q_values
-                        ).item()  # 최대 가지를 가진 행동의 인덱스를 선택
+                        act_idx = _argmax(q_values).item() 
 
                     # # 에피소드 시작 시 최대 Q값을 시각화
                     # if epi_frame_cnt == 1:
@@ -402,6 +422,12 @@ class TrainAgent:
                 if len(self.replaybuffer) > 1000:
                     epi_progress = num_episode / self.NUM_EPISODES
                     batch = _sample(self.BATCH_SIZE, self.BUFFER_TYPE, epi_progress)
+                    # noisy network 사용 시 현행 모델 및 타겟 모델의 노이즈 리셋
+                    if self.Exploration == Exploration.NOISY_NET:
+                        self.model.reset_noise()
+                        if self.DQN_Type > 0:
+                            self.target_model.reset_noise()
+                    # 미니배치 훈련 시작
                     avg_td_error, avg_loss = train_buffer(
                         self.model,
                         self.target_model,
@@ -480,6 +506,7 @@ class TrainAgent:
                 # 실제 테스트로 모델 검증
                 self.xprint(f"{num_episode}에피소드 완료. 모델 테스트 5회 진행 중")
                 self.validate_model(episode=num_episode, num_test=5)
+                
                 # 학습률 감소
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
@@ -488,10 +515,11 @@ class TrainAgent:
                 self.xprint(
                     f"{num_episode}에피소드에서 기존 기록 20% 이상 갱신, 모델 테스트 5회 진행 중"
                 )
-                self.validate_model(num_test=5)
+                self.validate_model(episode=num_episode, num_test=5)
 
-            # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
-            self.epsilon = max(self.EPSILON_MIN, self.epsilon * self.EPSILON_DECAY)
+            if self.Exploration == Exploration.EPSILON_GREEDY:
+                # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
+                self.epsilon = max(self.EPSILON_MIN, self.epsilon * self.EPSILON_DECAY)
 
             # 텐서보드 로그
             _add_scalar("2_Performance/1_Survival_Time", survival_time, num_episode)

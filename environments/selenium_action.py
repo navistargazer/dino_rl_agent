@@ -9,7 +9,7 @@ class SeleniumAction:
         options = webdriver.ChromeOptions()
         options.add_argument("--disable-infobars")
         options.add_argument("--window-position=0,0")
-        options.add_argument("--window-size=800,600")
+        options.add_argument("--window-size=800,500")
 
         # 크롬의 모든 SSL/인증서 보안 경고창을 강제로 무시합니다.
         options.add_argument("--ignore-certificate-errors")
