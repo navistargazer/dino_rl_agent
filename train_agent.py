@@ -336,8 +336,9 @@ class TrainAgent:
                 # ===== 미니 배치 훈련(미분 및 역전파) ======
                 # 4. 모델 학습 (메모리에 데이터가 충분히 쌓이면 무작위로 꺼내서 복습)
                 if len(self.replaybuffer) >= self.BATCH_SIZE:
-                    epi_progress = num_episode / self.NUM_EPISODES
-                    batch = _sample(self.BATCH_SIZE - 1, self.BUFFER_TYPE, epi_progress)
+                    # epi_progress = num_episode / self.NUM_EPISODES
+                    # batch = _sample(self.BATCH_SIZE - 1, self.BUFFER_TYPE, epi_progress)
+                    batch = _sample(self.BATCH_SIZE - 1, self.BUFFER_TYPE)
                     # 신규 경험은 무조건 학습(오차가 크면 우선도 버퍼에 저장됨)
                     batch.append(experience)
                     # noisy network 사용 시 현행 모델 및 타겟 모델의 노이즈 리셋
