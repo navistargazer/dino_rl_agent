@@ -119,7 +119,7 @@ class Vision:
         # 6. 타겟 게임 영역 좌표 산출
         OFFSET_X = 40
         OFFSET_Y = -50
-        GAME_WIDTH = 320
+        GAME_WIDTH = 480
         GAME_HEIGHT = 80
 
         monitor_settings = {
@@ -144,7 +144,7 @@ class Vision:
             cv2.imshow(
                 "Capture(Press any key to continue)",
                 cv2.cvtColor(np.array(check_img), cv2.COLOR_BGRA2BGR),
-            )
+            )            
             cv2.waitKey(0)  # 임의의 키 입력 시 대기 종료
             cv2.destroyAllWindows()
 

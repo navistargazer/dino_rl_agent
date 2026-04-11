@@ -10,21 +10,11 @@ class ReplayBuffer:
         self.n_buffer = deque(maxlen=normal_cap)
 
     # 버퍼 메모리에 tuple 저장
-    def push(self, memory, buffer_type):
-        _, action, *_, done = memory
-        # 단일버퍼이면
-        if buffer_type == 0:
-            self.n_buffer.append(memory)
-            return
-        # 사망했거나, 점프/숙이기 동작을 한 것은 우선도 높은 기억
-        if done or action in [1, 2]:
-            self.p_buffer.append(memory)
-        # 나머지는 평범한 기억으로
-        else:
-            self.n_buffer.append(memory)
+    def push_to_normal(self, experience):
+        self.n_buffer.append(experience)
     
-    def push_to_priority(self, memory):
-        self.p_buffer.append(memory)
+    def push_to_priority(self, experience):
+        self.p_buffer.append(experience)
 
     # batch 수 만큼 랜덤 샘플링
     def sample(self, batch_size, buffer_type, epi_progress):

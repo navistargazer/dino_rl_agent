@@ -99,18 +99,20 @@ def train_buffer(model, target_model, optimizer, batch, device, buffer_type, pus
     # 가중치 업데이트
     optimizer.step()
 
-    # 하이브리드 듀얼 버퍼 : TD-error가 큰 기억은 우선도 버퍼에 밀어넣기
-    if buffer_type == 2:
-        # 오차의 절대값을 계산->토치 기울기 계산에서 분리->평탄화->cpu 램으로->넘파이배열
-        abs_td_errors = torch.abs(td_errors).squeeze(-1).cpu().numpy()
-        # 오차 크기 상위 10% 정도를 기준점으로 삼음
-        threshold = np.percentile(abs_td_errors, 90)
-        # 배치의 기억 중 기준이상의 TD-error값을 가진 기억을 우선도 버퍼로
-        to_priority = np.where(abs_td_errors >= threshold)[0]
-        for i in to_priority:
-            push_to_priority(batch[i])
+    # # 하이브리드 듀얼 버퍼 : TD-error가 큰 기억은 우선도 버퍼에 밀어넣기
+    # if buffer_type == 2:
+    #     # 오차의 절대값을 계산->토치 기울기 계산에서 분리->평탄화->cpu 램으로->넘파이배열
+    #     abs_td_errors = torch.abs(td_errors).squeeze(-1).cpu().numpy()
+    #     # 오차 크기 상위 10% 정도를 기준점으로 삼음
+    #     threshold = np.percentile(abs_td_errors, 90)
+    #     # 배치의 기억 중 기준이상의 TD-error값을 가진 기억을 우선도 버퍼로
+    #     to_priority = np.where(abs_td_errors >= threshold)[0]
+    #     for i in to_priority:
+    #         push_to_priority(batch[i])
 
-    return td_errors.mean().item(), loss.item()
+    # return td_errors.mean().item(), loss.item()
+    return td_errors.cpu().numpy(), loss.item()
+
 
 
 

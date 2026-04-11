@@ -6,8 +6,12 @@ chrome의 dino 게임을 플레이하는 인공지능 (테스트용)
 import numpy as np
 import time
 import torch
+import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 from environments import DQN, D3QN, Environment
+from trainer import train_buffer, ReplayBuffer
 import os
+from utils import draw_plots
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -37,23 +41,53 @@ class TargetUpdate(IntEnum):
     HARD = 0
     SOFT = 1
 
+class Exploration(IntEnum):
+    NONE = 0
+    EPSILON_GREEDY = 1
+    NOISY_NET = 2
+
+
 
 @dataclass
 class HyperParameters:
     # DQN 버전 (0:vanilla, 1:nature, 2:double, 3:dueling )
-    dqn_type: DQNType = DQNType.DOUBLE
-    # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference))
+    dqn_type: DQNType = DQNType.DUELING
+    # 화면 이미지 전처리 방식 (0:흑백만, 1:윤곽선검출, 2:프레임차이(difference)) 
     img_process: ImgProcess = ImgProcess.CANNY
     # 기억용 버퍼 타입 (0:단일버퍼, 1:우선도+노멀 듀얼버퍼, 2:하이브리드 듀얼 버퍼)
     buffer_type: BufferType = BufferType.HYBRID
     # 타겟 네트워크 업데이트 타입 (0:1000프레임마다 하드 업데이트, 1:소프트 업데이트)
     target_update: TargetUpdate = TargetUpdate.HARD
-    # CNN 인풋용 리사이즈 픽셀크기
+    # 탐험 정책(0:엡실론-그리디, 1:노이지 네트워크)
+    exploration: Exploration = Exploration.NOISY_NET
+    # CNN 인풋용 리사이즈 픽셀 세로 크기
     pixel: int = 64
     # 행동 보상 (사망, 대기)
     rewards: tuple[float, float] = (-1, 0.01)
-   # 초당 프레임 수
+    # 훈련 반복 수
+    num_episodes: int = 1000
+    # 미니 배치 훈련에 사용할 과거 경험 개수
+    batch_size: int = 32
+    # 우선도 버퍼에서 꺼내는 비율
+    p_ratio: float = 0.5
+    # 우선도 버퍼 크기
+    p_buffer_size: int = 20000
+    # 노멀 버퍼 크기
+    n_buffer_size: int = 100000
+    # 초당 프레임 수
     fps: int = 15
+    # 엡실론(랜덤 탐험 비율) 최소값
+    epsilon_min: float = 0.01
+    # 에피소드 당 엡실론 감소율
+    epsilon_decay: float = 0.995
+    # 타겟 네트워크 업데이트 주기
+    update_freq: int = 1000
+    # 타겟 네트워크 소프트 업데이트 비율
+    tau: float = 0.002
+    # 학습률
+    learning_rate: float = 0.0001
+    # 미래가치 할인율
+    gamma: float = 0.97
     # 로그 및 확인 이미지 출력 여부
     without_log: bool = False
 
@@ -71,15 +105,27 @@ class TestAgent:
         self.IMG_PROCESS_TYPE = hp.img_process
         self.BUFFER_TYPE = hp.buffer_type
         self.TARGET_UPDATE = hp.target_update
+        self.Exploration = hp.exploration
         self.PIXEL = hp.pixel
         self.REWARDS = hp.rewards
         self.NUM_EPISODES = hp.num_episodes
+        self.BATCH_SIZE = hp.batch_size
+        self.P_RATIO = hp.p_ratio
+        self.P_BUFFER_SIZE = hp.p_buffer_size
+        self.N_BUFFER_SIZE = hp.n_buffer_size
         self.FPS = hp.fps
+        self.EPSILON_MIN = hp.epsilon_min
+        self.EPSILON_DECAY = hp.epsilon_decay
+        self.UPDATE_FREQ = hp.update_freq
+        self.TAU = hp.tau
+        self.LEARNING_RATE = hp.learning_rate
+        self.GAMMA = hp.gamma
         self.LOGGING = not hp.without_log
 
         # 하이퍼 파라미터 출력
         print(
-            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | REWARD:[사망, 생존]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
+            f"[INFO] DQN:{self.DQN_Type.name} | buffer:{self.BUFFER_TYPE.name} | ImgProcess:{self.IMG_PROCESS_TYPE.name} | TargetUpdate:{self.TARGET_UPDATE.name} | Exploration:{self.Exploration.name}", 
+            f"\n[INFO] REWARD:[사망, 생존]={self.REWARDS} | FPS:{self.FPS} | LR:{self.LEARNING_RATE} | GAMMA:{self.GAMMA} | TAU:{self.TAU}"
         )
 
         # 디바이스 설정
@@ -96,9 +142,24 @@ class TestAgent:
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
         CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
-        self.model = CNN(num_actions=3, input_pixel=self.PIXEL).to(
-            self.device
-        )  # 학습자의 두뇌
+        # 모델에 전달하는 파라미터 딕셔너리 - **로 언패킹해서 쓰면 됨
+        model_params = {
+            "input_shape": (4, self.PIXEL, self.PIXEL * 4),
+            "num_actions": 3,
+            "noisy_net": self.Exploration == Exploration.NOISY_NET,
+        }
+        self.model = CNN(**model_params).to(self.device)  # 학습자의 두뇌
+        # target model - nature DQN부터 타겟 네트워크 가동
+        # dqn 버전이 올라가면 타겟 모델 등장
+        if self.DQN_Type > 0:
+            self.target_model = CNN(**model_params).to(self.device)  # 목표 신경망
+            # 타겟 모델에 현행 모델의 상태 주입
+            self.target_model.load_state_dict(self.model.state_dict())
+            # 타겟 모델은 학습 없이 평가모드로
+            if self.Exploration != Exploration.NOISY_NET:
+                self.target_model.eval()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
+        # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
         self.env = Environment(
             self.IMG_PROCESS_TYPE,
             self.PIXEL,
@@ -111,16 +172,29 @@ class TestAgent:
 
         self.frame_time = 1.0 / self.FPS
 
-       # 학습 이어하기(모델 저장 파일 로드)
+        # 기억 저장용 버퍼
+        self.replaybuffer = ReplayBuffer(
+            priority_cap=self.P_BUFFER_SIZE,
+            normal_cap=self.N_BUFFER_SIZE,
+            priority_ratio=self.P_RATIO,
+        )
+
+        # 이어서 학습할 경우를 위한 변수
+        self.best_score = 0
+        self.epsilon = 1.0
+
+        # 학습 이어하기(모델 저장 파일 로드)
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.model_name = f"{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}"
-        self.model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
+        self.model_name = f"{self.DQN_Type.name}_{self.BUFFER_TYPE.name}_{self.IMG_PROCESS_TYPE.name}_{self.TARGET_UPDATE.name}_{self.Exploration.name}"
+        # self.best_model_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}.pth")
+        self.best_model_path = "C:\dev\projects\dino_rl_agent\models\DUELING_HYBRID_CANNY_HARD_NOISY_NET.pth"
         self.xprint(f"{self.model_name} 모델 사용,", end=" ")
-        if os.path.exists(self.model_path):
-            checkpoint = torch.load(self.model_path)
+        if os.path.exists(self.best_model_path):
+            checkpoint = torch.load(self.best_model_path)
             self.model.load_state_dict(checkpoint["model_state_dict"])
-            # self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             self.best_score = checkpoint["best_score"]
+            self.epsilon = max(checkpoint["epsilon"], 0.1)
             self.xprint(
                 f"이어서 학습 시작 (기존 최고 생존: {self.best_score} / Epsilon: {self.epsilon:.3f})"
             )
@@ -129,6 +203,16 @@ class TestAgent:
             self.best_score = 0
             self.epsilon = 1.0
             self.xprint("새로운 학습 시작")
+
+        # 그래프 저장 경로
+        plot_dir = os.path.join(self.BASE_DIR, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        self.plot_path = os.path.join(plot_dir, f"{self.model_name}.png")
+        # tensorboard 로그 경로
+        log_dir = os.path.join(self.BASE_DIR, "runs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, f"{self.model_name}")
+        self.writer = SummaryWriter(log_path)  # run/self.model_name 폴더에 로그가 쌓임
 
         self.history_q_values = []
         self.history_td_error = []
