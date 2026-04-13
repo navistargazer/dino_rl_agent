@@ -37,6 +37,14 @@ class ReplayBuffer:
         n_samples = random.sample(self.n_buffer, n_size)
         return p_samples + n_samples
 
+    @property
+    def p_buffer_size(self):
+        return len(self.p_buffer)
+
+    @property
+    def n_buffer_size(self):
+        return len(self.n_buffer)
+
     # 현재 버퍼에 쌓인 수 리턴 len(replaybuffer) 의 값
     def __len__(self):
         return len(self.p_buffer) + len(self.n_buffer)

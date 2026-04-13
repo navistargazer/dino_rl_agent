@@ -26,7 +26,7 @@ def draw_plots(history_q_values, history_td_error, history_loss, history_survive
     plt.grid(True)
 
     plt.subplot(2, 2, 3)
-    plt.plot(history_survived, color='r', label='Time Survived')
+    plt.plot(history_survived, color='r', label='Survived MA10')
     plt.xlabel('Episode')
     plt.ylabel('Time Survived')
     plt.legend()

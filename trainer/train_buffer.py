@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def train_buffer(model, target_model, optimizer, batch, device, buffer_type, push_to_priority, dqn_ver=3, gamma=0.99):
+def train_buffer(model, target_model, optimizer, batch, device, dqn_ver=3, gamma=0.99):
     """
     미니 배치 훈련 : 기억 버퍼(우선도/노멀)에서 랜덤 추출한 경험을 미분/역전파/최적화
     """

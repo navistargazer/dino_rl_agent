@@ -72,9 +72,9 @@ class HyperParameters:
     # 우선도 버퍼에서 꺼내는 비율
     p_ratio: float = 0.25
     # 우선도 버퍼 크기
-    p_buffer_size: int = 20000
+    p_buffer_size: int = 5000
     # 노멀 버퍼 크기
-    n_buffer_size: int = 80000
+    n_buffer_size: int = 15000
     # 초당 프레임 수
     fps: int = 15
     # 엡실론(랜덤 탐험 비율) 최소값
@@ -98,7 +98,7 @@ class HyperParameters:
         self.img_process = ImgProcess(self.img_process)
         self.buffer_type = BufferType(self.buffer_type)
         self.target_update = TargetUpdate(self.target_update)
-
+        self.exploration = Exploration(self.exploration)
 
 class TrainAgent:
     def __init__(self, hp: HyperParameters = HyperParameters(), logging=True):
@@ -142,7 +142,7 @@ class TrainAgent:
         # torch.set_num_threads(1)
 
         # online model - 버전에 따라 DQN(vanilla, nature, double), D3QN(dueling) 선택
-        CNN = DQN if self.DQN_Type < DQNType.DUELING else D3QN
+        CNN = D3QN if self.DQN_Type == DQNType.DUELING else DQN
         # 모델에 전달하는 파라미터 딕셔너리 - **로 언패킹해서 쓰면 됨
         model_params = {
             "input_shape": (4, self.PIXEL, self.PIXEL * 4),
@@ -150,15 +150,6 @@ class TrainAgent:
             "noisy_net": self.Exploration == Exploration.NOISY_NET,
         }
         self.model = CNN(**model_params).to(self.device)  # 학습자의 두뇌
-        # target model - nature DQN부터 타겟 네트워크 가동
-        # dqn 버전이 올라가면 타겟 모델 등장
-        if self.DQN_Type > 0:
-            self.target_model = CNN(**model_params).to(self.device)  # 목표 신경망
-            # 타겟 모델에 현행 모델의 상태 주입
-            self.target_model.load_state_dict(self.model.state_dict())
-            # 타겟 모델은 학습 없이 평가모드로
-            if self.Exploration != Exploration.NOISY_NET:
-                self.target_model.eval()
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
         # 키보드 제어, 보상 판단을 통제할 환경 인스턴스
         self.env = Environment(
@@ -200,10 +191,19 @@ class TrainAgent:
             )
         else:
             os.makedirs(os.path.join(self.BASE_DIR, "models"), exist_ok=True)
-            self.best_score = 50
+            self.best_score = 30
             self.epsilon = 1.0
             self.xprint("새로운 학습 시작")
 
+        # target model - nature DQN부터 타겟 네트워크 가동
+        # dqn 버전이 올라가면 타겟 모델 등장
+        if self.DQN_Type > DQNType.VANILLA:
+            self.target_model = CNN(**model_params).to(self.device)  # 목표 신경망
+            # 타겟 모델에 현행 모델의 상태 주입
+            self.target_model.load_state_dict(self.model.state_dict())
+            # 타겟 모델은 학습 없이 평가모드로(노이지 네트워크의 경우에는 훈련모드)
+            if self.Exploration != Exploration.NOISY_NET:
+                self.target_model.eval()
 
     # 에이전트 훈련 함수
     def train_agent(self):
@@ -224,10 +224,10 @@ class TrainAgent:
         _rand = np.random.rand
         _randint = np.random.randint
 
-        _push_to_normal = self.replaybuffer.push_to_normal
-        _push_to_priority = self.replaybuffer.push_to_priority
-        _sample = self.replaybuffer.sample
-
+        _replaybuffer = self.replaybuffer
+        _push_to_normal = _replaybuffer.push_to_normal
+        _push_to_priority = _replaybuffer.push_to_priority
+        _sample = _replaybuffer.sample
 
         # 그래프 저장 경로
         plot_dir = os.path.join(self.BASE_DIR, "plots")
@@ -267,8 +267,7 @@ class TrainAgent:
             if self.DQN_Type == DQNType.DUELING:
                 sum_value, sum_advantage = 0.0, 0.0
             # avg_td_error
-            sum_td_error = 0.0
-            sum_loss = 0.0
+            sum_td_error, sum_loss = 0.0, 0.0
             # 단일 에피소드 시작
             while not done:
                 frame_start = time.time()
@@ -353,8 +352,6 @@ class TrainAgent:
                         self.optimizer,
                         batch,
                         self.device,
-                        self.BUFFER_TYPE,
-                        _push_to_priority,
                         self.DQN_Type,
                         self.GAMMA,
                     )
@@ -364,21 +361,18 @@ class TrainAgent:
                     # td-error의 절대값 배열
                     abs_td_errors = np.abs(td_errors)
                     # 신규 경험의 오차가 일정 수준 이상이면 우선도 버퍼로, 아니면 노멀 버퍼로
-                    td_error = abs_td_errors[-1]
-                    threshold = np.percentile(abs_td_errors, 75)
-                    if td_error >= threshold:
-                        _push_to_priority(experience)
-                    else:
+                    if self.BUFFER_TYPE == BufferType.SINGLE:
                         _push_to_normal(experience)
-                # 버퍼가 충분하지 않으면 노멀 버퍼로
-                else:
-                    _push_to_normal(experience)
+                    else:
+                        td_error = abs_td_errors[-1]
+                        threshold = np.percentile(abs_td_errors, 90)
+                        if td_error >= threshold:
+                            _push_to_priority(experience)
+                        else:
+                            _push_to_normal(experience)
 
-
-
-                    # 5. 타겟 네트워크 업데이트
-                    # 타겟 네트워크 소프트 업데이트
-                    if self.BUFFER_TYPE > 0 and  self.TARGET_UPDATE == TargetUpdate.SOFT:
+                    # 5. 타겟 네트워크 소프트 업데이트
+                    if self.DQN_Type > DQNType.VANILLA and  self.TARGET_UPDATE == TargetUpdate.SOFT:
                         # 매 스텝마다 타겟 네트워크를 소프트 업데이트
                         for target_param, online_param in zip(
                             self.target_model.parameters(), self.model.parameters()
@@ -387,6 +381,10 @@ class TrainAgent:
                                 self.TAU * online_param.data
                                 + (1.0 - self.TAU) * target_param.data
                             )
+
+                # 버퍼가 충분하지 않으면 노멀 버퍼로
+                else:
+                    _push_to_normal(experience)
 
                 # 6. 프레임 간격보다 짧은 시간에 끝났다면 기다림
                 interval = time.time() - frame_start
@@ -403,10 +401,10 @@ class TrainAgent:
                 print("#", end="", flush=True)
                 time.sleep(0.0167)
                 continue
-
+            # self.xprint(f'buffer_ratio(p:n) = {_replaybuffer.p_buffer_size}:{_replaybuffer.n_buffer_size} = 1:{_replaybuffer.n_buffer_size/_replaybuffer.p_buffer_size:.1f}')
             # 타겟 하드 업데이트
             if self.TARGET_UPDATE == TargetUpdate.HARD:
-                # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트
+                # 타겟 모델 업데이트 후 1000프레임 이상, 3에피소드 이상인 경우 타겟 모델 업데이트(최대 20에피소드 간격)
                 if (frame_since_update > self.UPDATE_FREQ and avg_loss < loss_since_update * 1.1) or episode_since_update >= 20:
                     self.target_model.load_state_dict(self.model.state_dict())
                     self.xprint(
@@ -429,43 +427,43 @@ class TrainAgent:
                 f"Episode:{num_episode}/{self.NUM_EPISODES} | Survived:{survival_time:.3f} | Fatal_Q:{max_q:.3f} | TD_Error:{avg_td_error:.5f} | Loss:{avg_loss:.5f} | Total Reward:{reward_sum:.2f} | Epsilon:{self.epsilon:.2f}"
             )
 
-            # # 베스트 모델 저장 & 학습률 감소
-            # if (num_episode) % 100 == 0:
-            #     # 사망 시 에이전트의 시야 확인
-            #     frames, _ = next_state
-            #     record_path = os.path.join(self.BASE_DIR, "results")
-            #     os.makedirs(record_path, exist_ok=True)
-            #     self.env.vision.record_death(frames, num_episode, record_path)
-            #     # 실제 테스트로 모델 검증
-            #     self.xprint(f"{num_episode}에피소드 완료. 모델 테스트 5회 진행 중")
-            #     self.validate_model(episode=num_episode, num_test=5)
-                
-            #     # 학습률 감소
-            #     for param_group in self.optimizer.param_groups:
-            #         param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
-            #     self.xprint(f"학습률 감소 : {self.optimizer.param_groups[0]['lr']:.7f}")
-
-            # 베스트 모델 저장
+            # 하이스코어 모델 저장
             if survival_time > self.best_score:
                 self.best_score = survival_time
-                checkpoint = {
-                "model_state_dict": self.model.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "best_score": self.best_score,
-                "epsilon": self.epsilon,
-                }
-                torch.save(checkpoint, os.path.join(self.BASE_DIR, f"models/{self.model_name}_Ep{episode}_{self.best_score:.3f}s.pth"))
-                self.xprint(f"{self.best_score:.3f}로 최고 기록이 갱신되었습니다.")
+                self.save_checkpoint(self.best_score, self.best_model_path)
+                self.xprint(f"{survival_time:.3f}로 최고 기록이 갱신되었습니다.")
+                
+            # 체크포인트 저장 & 학습률 감소
+            if (num_episode) % 100 == 0:
+                # 사망 시 에이전트의 시야 확인
+                frames, _ = next_state
+                record_path = os.path.join(self.BASE_DIR, "results")
+                os.makedirs(record_path, exist_ok=True)
+                self.env.vision.record_death(frames, num_episode, record_path)
+                # # 실제 테스트로 모델 검증
+                # self.xprint(f"{num_episode}에피소드 완료. 모델 테스트 5회 진행 중")
+                # self.validate_model(episode=num_episode, num_test=5)
+                check_path = os.path.join(self.BASE_DIR, f"models/{self.model_name}_Ep{num_episode}_{survival_time:.3f}s.pth")
+                self.save_checkpoint(survival_time, check_path)
+                self.xprint(f"{num_episode}에피소드 완료. 모델 저장 : {check_path}")
+                
+                # 학습률 감소
+                for param_group in self.optimizer.param_groups:
+                    param_group["lr"] = max(1e-5, param_group["lr"] * 0.95)
+                self.xprint(f"학습률 감소 : {self.optimizer.param_groups[0]['lr']:.7f}")
+            
 
+            # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
             if self.Exploration == Exploration.EPSILON_GREEDY:
-                # 판이 끝날 때마다 점차 무작위 탐험(epsilon) 확률을 0.5%씩 줄여나감(최저값은 0.05)
                 self.epsilon = max(self.EPSILON_MIN, self.epsilon * self.EPSILON_DECAY)
 
-            # 기록
+            # 진행 확인용 시각화
             history_q_values.append(max_q)
             history_td_error.append(avg_td_error)
             history_loss.append(avg_loss)
             history_survived.append(avg_score)
+            # 그래프 저장
+            draw_plots(history_q_values, history_td_error, history_loss, history_survived, plot_path)
 
             # 텐서보드 로그
             _add_scalar("2_Performance/1_Survival_Time", survival_time, num_episode)
@@ -479,11 +477,10 @@ class TrainAgent:
                     "3_Dueling/5_Average Advantage", sum_advantage / epi_frame_cnt, num_episode
                 )
             writer.flush()
-            # 그래프 저장
-            draw_plots(history_q_values, history_td_error, history_loss, history_survived, plot_path)
 
         # 훈련 종료
         writer.close()
+
     
 
     def validate_model(self, episode, num_test=5):
@@ -552,23 +549,28 @@ class TrainAgent:
 
         # 최대 생존 시간
         best_score = max(survival_record)
-        # 정기적 모델 저장
-        checkpoint = {
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "best_score": best_score,
-            "epsilon": self.epsilon,
-        }
-        torch.save(checkpoint, os.path.join(self.BASE_DIR, f"models/{self.model_name}_Ep{episode}_{best_score:.3f}s.pth"))
-
         # 베스트 모델 저장
         if best_score > self.best_score:
             self.best_score = best_score
+            checkpoint = {
+                "model_state_dict": self.model.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+                "best_score": best_score,
+                "epsilon": self.epsilon,
+            }
             torch.save(checkpoint, self.best_model_path)
             self.xprint(f"{best_score:.3f}로 최고 기록이 갱신되었습니다.")
         else:
             self.xprint("기록 갱신 실패")
 
+    def save_checkpoint(self, score, path):
+        checkpoint = {
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "best_score": score,
+            "epsilon": self.epsilon,
+        }
+        torch.save(checkpoint, path)
     def xprint(self, text, end="\n", flush=False):
         if self.LOGGING:
             print(text, end=end, flush=flush)
